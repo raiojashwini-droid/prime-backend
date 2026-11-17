@@ -1,0 +1,982 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model accidents {
+  id               BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  vehicle_id       BigInt             @db.UnsignedBigInt
+  driver_id        BigInt?            @db.UnsignedBigInt
+  rental_id        BigInt?            @db.UnsignedBigInt
+  accident_date    DateTime           @db.DateTime(0)
+  location         String?            @db.VarChar(255)
+  description      String?            @db.Text
+  police_report_no String?            @db.VarChar(100)
+  estimated_damage Decimal?           @db.Decimal(12, 2)
+  status           accidents_status   @default(reported)
+  created_at       DateTime           @default(now()) @db.Timestamp(0)
+  updated_at       DateTime           @default(now()) @db.Timestamp(0)
+  drivers          drivers?           @relation(fields: [driver_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "accidents_driver_id_foreign")
+  rentals          rentals?           @relation(fields: [rental_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "accidents_rental_id_foreign")
+  vehicles         vehicles           @relation(fields: [vehicle_id], references: [id], onUpdate: Restrict, map: "accidents_vehicle_id_foreign")
+  insurance_claims insurance_claims[]
+
+  @@index([accident_date], map: "accidents_accident_date_index")
+  @@index([driver_id], map: "accidents_driver_id_index")
+  @@index([rental_id], map: "accidents_rental_id_index")
+  @@index([status], map: "accidents_status_index")
+  @@index([vehicle_id], map: "accidents_vehicle_id_index")
+}
+
+model alert_history {
+  id                  BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
+  rule_id             BigInt?                @db.UnsignedBigInt
+  event_type          String                 @db.VarChar(100)
+  title               String                 @db.VarChar(200)
+  severity            alert_history_severity @default(info)
+  message             String?                @db.Text
+  related_entity_type String?                @db.VarChar(100)
+  related_entity_id   BigInt?                @db.UnsignedBigInt
+  resolved_at         DateTime?              @db.DateTime(0)
+  resolved_by         BigInt?                @db.UnsignedBigInt
+  created_at          DateTime               @default(now()) @db.Timestamp(0)
+  updated_at          DateTime               @default(now()) @db.Timestamp(0)
+  users               users?                 @relation(fields: [resolved_by], references: [id], onUpdate: Restrict, map: "alert_history_resolved_by_foreign")
+  notification_rules  notification_rules?    @relation(fields: [rule_id], references: [id], onUpdate: Restrict, map: "alert_history_rule_id_foreign")
+
+  @@index([event_type], map: "alert_history_event_type_index")
+  @@index([related_entity_type, related_entity_id], map: "alert_history_related_entity_type_related_entity_id_index")
+  @@index([resolved_at], map: "alert_history_resolved_at_index")
+  @@index([resolved_by], map: "alert_history_resolved_by_index")
+  @@index([rule_id], map: "alert_history_rule_id_index")
+  @@index([severity], map: "alert_history_severity_index")
+}
+
+model audit_logs {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id     BigInt?  @db.UnsignedBigInt
+  module      String   @db.VarChar(100)
+  action      String   @db.VarChar(100)
+  entity_type String?  @db.VarChar(100)
+  entity_id   BigInt?  @db.UnsignedBigInt
+  old_values  String?  @db.LongText
+  new_values  String?  @db.LongText
+  ip_address  String?  @db.VarChar(50)
+  user_agent  String?  @db.Text
+  created_at  DateTime @default(now()) @db.Timestamp(0)
+  users       users?   @relation(fields: [user_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "audit_logs_user_id_foreign")
+
+  @@index([action], map: "audit_logs_action_index")
+  @@index([created_at], map: "audit_logs_created_at_index")
+  @@index([entity_type, entity_id], map: "audit_logs_entity_type_entity_id_index")
+  @@index([module], map: "audit_logs_module_index")
+  @@index([user_id], map: "audit_logs_user_id_index")
+}
+
+model document_versions {
+  id             BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  document_id    BigInt    @db.UnsignedBigInt
+  version_number Int       @default(1)
+  file_url       String    @db.VarChar(500)
+  file_size      Int?      @db.UnsignedInt
+  uploaded_by    BigInt?   @db.UnsignedBigInt
+  change_summary String?   @db.Text
+  created_at     DateTime  @default(now()) @db.Timestamp(0)
+  updated_at     DateTime  @default(now()) @db.Timestamp(0)
+  documents      documents @relation(fields: [document_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "document_versions_document_id_foreign")
+  users          users?    @relation(fields: [uploaded_by], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "document_versions_uploaded_by_foreign")
+
+  @@index([document_id], map: "document_versions_document_id_index")
+  @@index([uploaded_by], map: "document_versions_uploaded_by_index")
+}
+
+model documents {
+  id                BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
+  title             String              @db.VarChar(255)
+  document_type     String              @db.VarChar(100)
+  file_url          String              @db.VarChar(500)
+  file_size         Int?                @db.UnsignedInt
+  mime_type         String?             @db.VarChar(100)
+  vehicle_id        BigInt?             @db.UnsignedBigInt
+  driver_id         BigInt?             @db.UnsignedBigInt
+  rental_id         BigInt?             @db.UnsignedBigInt
+  uploaded_by       BigInt?             @db.UnsignedBigInt
+  expiry_date       DateTime?           @db.Date
+  notes             String?             @db.Text
+  created_at        DateTime            @default(now()) @db.Timestamp(0)
+  updated_at        DateTime            @default(now()) @db.Timestamp(0)
+  document_versions document_versions[]
+  drivers           drivers?            @relation(fields: [driver_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "documents_driver_id_foreign")
+  rentals           rentals?            @relation(fields: [rental_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "documents_rental_id_foreign")
+  users             users?              @relation(fields: [uploaded_by], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "documents_uploaded_by_foreign")
+  vehicles          vehicles?           @relation(fields: [vehicle_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "documents_vehicle_id_foreign")
+
+  @@index([document_type], map: "documents_document_type_index")
+  @@index([driver_id], map: "documents_driver_id_index")
+  @@index([expiry_date], map: "documents_expiry_date_index")
+  @@index([rental_id], map: "documents_rental_id_index")
+  @@index([uploaded_by], map: "documents_uploaded_by_index")
+  @@index([vehicle_id], map: "documents_vehicle_id_index")
+}
+
+model drivers {
+  id                  BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  first_name          String                @db.VarChar(100)
+  last_name           String                @db.VarChar(100)
+  email               String?               @db.VarChar(255)
+  phone               String?               @db.VarChar(50)
+  license_number      String?               @db.VarChar(100)
+  license_state       String?               @db.VarChar(10)
+  license_expiry      DateTime?             @db.Date
+  status              drivers_status        @default(pending)
+  balance             Decimal               @default(0.00) @db.Decimal(12, 2)
+  deposit_held        Decimal               @default(0.00) @db.Decimal(12, 2)
+  notes               String?               @db.Text
+  archived_at         DateTime?             @db.Timestamp(0)
+  created_at          DateTime              @default(now()) @db.Timestamp(0)
+  updated_at          DateTime              @default(now()) @db.Timestamp(0)
+  accidents           accidents[]
+  documents           documents[]
+  employee_paperwork  employee_paperwork[]
+  invoices            invoices[]
+  ledger_entries      ledger_entries[]
+  rentals             rentals[]
+  tolls_tickets       tolls_tickets[]
+  vehicle_assignments vehicle_assignments[]
+
+  @@index([archived_at], map: "drivers_archived_at_index")
+  @@index([email], map: "drivers_email_index")
+  @@index([license_expiry], map: "drivers_license_expiry_index")
+  @@index([license_number], map: "drivers_license_number_index")
+  @@index([status], map: "drivers_status_index")
+}
+
+model employee_paperwork {
+  id                                          BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id                                     BigInt?                   @db.UnsignedBigInt
+  driver_id                                   BigInt?                   @db.UnsignedBigInt
+  full_name                                   String                    @db.VarChar(200)
+  ssn_last4                                   String?                   @db.VarChar(4)
+  dob                                         DateTime?                 @db.Date
+  address                                     String?                   @db.Text
+  phone                                       String?                   @db.VarChar(50)
+  emergency_contact                           String?                   @db.LongText
+  direct_deposit_details                      String?                   @db.LongText
+  status                                      employee_paperwork_status @default(draft)
+  submitted_at                                DateTime?                 @db.DateTime(0)
+  reviewed_by                                 BigInt?                   @db.UnsignedBigInt
+  review_notes                                String?                   @db.Text
+  signature_url                               String?                   @db.VarChar(500)
+  created_at                                  DateTime                  @default(now()) @db.Timestamp(0)
+  updated_at                                  DateTime                  @default(now()) @db.Timestamp(0)
+  drivers                                     drivers?                  @relation(fields: [driver_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "employee_paperwork_driver_id_foreign")
+  users_employee_paperwork_reviewed_byTousers users?                    @relation("employee_paperwork_reviewed_byTousers", fields: [reviewed_by], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "employee_paperwork_reviewed_by_foreign")
+  users_employee_paperwork_user_idTousers     users?                    @relation("employee_paperwork_user_idTousers", fields: [user_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "employee_paperwork_user_id_foreign")
+
+  @@index([driver_id], map: "employee_paperwork_driver_id_index")
+  @@index([reviewed_by], map: "employee_paperwork_reviewed_by_index")
+  @@index([status], map: "employee_paperwork_status_index")
+  @@index([submitted_at], map: "employee_paperwork_submitted_at_index")
+  @@index([user_id], map: "employee_paperwork_user_id_index")
+}
+
+model expenses {
+  id                                BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  vehicle_id                        BigInt?           @db.UnsignedBigInt
+  vendor_id                         BigInt?           @db.UnsignedBigInt
+  rental_id                         BigInt?           @db.UnsignedBigInt
+  recorded_by                       BigInt?           @db.UnsignedBigInt
+  approver_id                       BigInt?           @db.UnsignedBigInt
+  category                          expenses_category
+  amount                            Decimal           @db.Decimal(12, 2)
+  expense_date                      DateTime          @db.Date
+  payment_method                    String?           @db.VarChar(100)
+  invoice_receipt_url               String?           @db.VarChar(500)
+  description                       String?           @db.Text
+  status                            expenses_status   @default(pending)
+  created_at                        DateTime          @default(now()) @db.Timestamp(0)
+  updated_at                        DateTime          @default(now()) @db.Timestamp(0)
+  users_expenses_approver_idTousers users?            @relation("expenses_approver_idTousers", fields: [approver_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "expenses_approver_id_foreign")
+  users_expenses_recorded_byTousers users?            @relation("expenses_recorded_byTousers", fields: [recorded_by], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "expenses_recorded_by_foreign")
+  rentals                           rentals?          @relation(fields: [rental_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "expenses_rental_id_foreign")
+  vehicles                          vehicles?         @relation(fields: [vehicle_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "expenses_vehicle_id_foreign")
+  vendors                           vendors?          @relation(fields: [vendor_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "expenses_vendor_id_foreign")
+
+  @@index([approver_id], map: "expenses_approver_id_foreign")
+  @@index([category], map: "expenses_category_index")
+  @@index([expense_date], map: "expenses_expense_date_index")
+  @@index([recorded_by], map: "expenses_recorded_by_foreign")
+  @@index([rental_id], map: "expenses_rental_id_index")
+  @@index([status], map: "expenses_status_index")
+  @@index([vehicle_id], map: "expenses_vehicle_id_index")
+  @@index([vendor_id], map: "expenses_vendor_id_index")
+}
+
+model inspection_photos {
+  id            BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  inspection_id BigInt                @db.UnsignedBigInt
+  photo_url     String                @db.VarChar(500)
+  caption       String?               @db.VarChar(255)
+  tag           inspection_photos_tag @default(other)
+  created_at    DateTime              @default(now()) @db.Timestamp(0)
+  updated_at    DateTime              @default(now()) @db.Timestamp(0)
+  inspections   inspections           @relation(fields: [inspection_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "inspection_photos_inspection_id_foreign")
+
+  @@index([inspection_id], map: "inspection_photos_inspection_id_index")
+  @@index([tag], map: "inspection_photos_tag_index")
+}
+
+model inspections {
+  id                  BigInt                      @id @default(autoincrement()) @db.UnsignedBigInt
+  rental_id           BigInt?                     @db.UnsignedBigInt
+  vehicle_id          BigInt                      @db.UnsignedBigInt
+  inspector_id        BigInt?                     @db.UnsignedBigInt
+  inspection_type     inspections_inspection_type
+  inspection_date     DateTime                    @db.DateTime(0)
+  odometer            Int
+  fuel_level          String?                     @db.VarChar(50)
+  condition_checklist String?                     @db.LongText
+  notes               String?                     @db.Text
+  driver_acknowledged Boolean                     @default(false)
+  created_at          DateTime                    @default(now()) @db.Timestamp(0)
+  updated_at          DateTime                    @default(now()) @db.Timestamp(0)
+  inspection_photos   inspection_photos[]
+  users               users?                      @relation(fields: [inspector_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "inspections_inspector_id_foreign")
+  rentals             rentals?                    @relation(fields: [rental_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "inspections_rental_id_foreign")
+  vehicles            vehicles                    @relation(fields: [vehicle_id], references: [id], onUpdate: Restrict, map: "inspections_vehicle_id_foreign")
+
+  @@index([inspection_date], map: "inspections_inspection_date_index")
+  @@index([inspection_type], map: "inspections_inspection_type_index")
+  @@index([inspector_id], map: "inspections_inspector_id_index")
+  @@index([rental_id], map: "inspections_rental_id_index")
+  @@index([vehicle_id], map: "inspections_vehicle_id_index")
+}
+
+model insurance_claims {
+  id                  BigInt                  @id @default(autoincrement()) @db.UnsignedBigInt
+  policy_id           BigInt?                 @db.UnsignedBigInt
+  accident_id         BigInt?                 @db.UnsignedBigInt
+  vehicle_id          BigInt?                 @db.UnsignedBigInt
+  claim_number        String                  @db.VarChar(100)
+  claim_date          DateTime                @db.Date
+  claim_amount        Decimal                 @db.Decimal(12, 2)
+  payout_amount       Decimal                 @default(0.00) @db.Decimal(12, 2)
+  deductible_applied  Decimal                 @default(0.00) @db.Decimal(12, 2)
+  status              insurance_claims_status @default(submitted)
+  notes               String?                 @db.Text
+  created_at          DateTime                @default(now()) @db.Timestamp(0)
+  updated_at          DateTime                @default(now()) @db.Timestamp(0)
+  accident_ref        String?                 @db.VarChar(100)
+  policy_number       String?                 @db.VarChar(100)
+  insurer             String?                 @db.VarChar(150)
+  vehicle             String?                 @db.VarChar(150)
+  plate               String?                 @db.VarChar(50)
+  driver              String?                 @db.VarChar(150)
+  repair_invoice      String?                 @db.VarChar(150)
+  repair_invoice_file String?                 @db.VarChar(255)
+  repair_estimate     Decimal?                @db.Decimal(12, 2)
+  deductible_terms    String?                 @db.VarChar(150)
+  driver_charge       Decimal?                @default(0.00) @db.Decimal(12, 2)
+  driver_recovered    Decimal?                @default(0.00) @db.Decimal(12, 2)
+  amount_recovered    Decimal?                @default(0.00) @db.Decimal(12, 2)
+  adjuster_name       String?                 @db.VarChar(150)
+  adjuster_phone      String?                 @db.VarChar(100)
+  accidents           accidents?              @relation(fields: [accident_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "insurance_claims_accident_id_foreign")
+  insurance_policies  insurance_policies?     @relation(fields: [policy_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "insurance_claims_policy_id_foreign")
+  vehicles            vehicles?               @relation(fields: [vehicle_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "insurance_claims_vehicle_id_foreign")
+
+  @@index([accident_id], map: "insurance_claims_accident_id_index")
+  @@index([claim_number], map: "insurance_claims_claim_number_index")
+  @@index([policy_id], map: "insurance_claims_policy_id_index")
+  @@index([status], map: "insurance_claims_status_index")
+  @@index([vehicle_id], map: "insurance_claims_vehicle_id_index")
+}
+
+model insurance_policies {
+  id               BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
+  vehicle_id       BigInt?                   @db.UnsignedBigInt
+  policy_number    String                    @db.VarChar(100)
+  insurer_name     String                    @db.VarChar(150)
+  coverage_type    String                    @db.VarChar(100)
+  premium          Decimal                   @db.Decimal(12, 2)
+  deductible       Decimal                   @default(0.00) @db.Decimal(12, 2)
+  effective_date   DateTime                  @db.Date
+  expiry_date      DateTime                  @db.Date
+  status           insurance_policies_status @default(active)
+  created_at       DateTime                  @default(now()) @db.Timestamp(0)
+  updated_at       DateTime                  @default(now()) @db.Timestamp(0)
+  coverage_details String?                   @db.Text
+  vehicles_covered String?                   @db.VarChar(150)
+  contacts         String?                   @db.LongText
+  documents        String?                   @db.LongText
+  insurance_claims insurance_claims[]
+  vehicles         vehicles?                 @relation(fields: [vehicle_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "insurance_policies_vehicle_id_foreign")
+
+  @@index([expiry_date], map: "insurance_policies_expiry_date_index")
+  @@index([policy_number], map: "insurance_policies_policy_number_index")
+  @@index([status], map: "insurance_policies_status_index")
+  @@index([vehicle_id], map: "insurance_policies_vehicle_id_index")
+}
+
+model invitations {
+  id          BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  email       String           @db.VarChar(255)
+  role        invitations_role
+  token       String           @unique(map: "invitations_token_unique") @db.VarChar(255)
+  invited_by  BigInt?          @db.UnsignedBigInt
+  expires_at  DateTime         @default(now()) @db.Timestamp(0)
+  accepted_at DateTime?        @db.Timestamp(0)
+  created_at  DateTime         @default(now()) @db.Timestamp(0)
+  updated_at  DateTime         @default(now()) @db.Timestamp(0)
+  users       users?           @relation(fields: [invited_by], references: [id], onUpdate: Restrict, map: "invitations_invited_by_foreign")
+
+  @@index([email], map: "invitations_email_index")
+  @@index([invited_by], map: "invitations_invited_by_index")
+}
+
+model invoice_items {
+  id          BigInt                  @id @default(autoincrement()) @db.UnsignedBigInt
+  invoice_id  BigInt                  @db.UnsignedBigInt
+  description String                  @db.VarChar(255)
+  category    invoice_items_category?
+  quantity    Decimal                 @default(1.00) @db.Decimal(8, 2)
+  unit_price  Decimal                 @db.Decimal(12, 2)
+  amount      Decimal                 @db.Decimal(12, 2)
+  created_at  DateTime                @default(now()) @db.Timestamp(0)
+  updated_at  DateTime                @default(now()) @db.Timestamp(0)
+  invoices    invoices                @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "invoice_items_invoice_id_foreign")
+
+  @@index([invoice_id], map: "invoice_items_invoice_id_index")
+}
+
+model invoices {
+  id             BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  invoice_number String           @unique(map: "invoices_invoice_number_unique") @db.VarChar(100)
+  rental_id      BigInt?          @db.UnsignedBigInt
+  driver_id      BigInt?          @db.UnsignedBigInt
+  issued_by      BigInt?          @db.UnsignedBigInt
+  issue_date     DateTime         @db.Date
+  due_date       DateTime         @db.Date
+  subtotal       Decimal          @db.Decimal(12, 2)
+  tax            Decimal          @default(0.00) @db.Decimal(12, 2)
+  total_amount   Decimal          @db.Decimal(12, 2)
+  paid_amount    Decimal          @default(0.00) @db.Decimal(12, 2)
+  balance        Decimal          @default(0.00) @db.Decimal(12, 2)
+  status         invoices_status  @default(draft)
+  created_at     DateTime         @default(now()) @db.Timestamp(0)
+  updated_at     DateTime         @default(now()) @db.Timestamp(0)
+  customer_name  String?          @db.VarChar(150)
+  vehicle_name   String?          @db.VarChar(150)
+  notes          String?          @db.Text
+  invoice_items  invoice_items[]
+  drivers        drivers?         @relation(fields: [driver_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "invoices_driver_id_foreign")
+  users          users?           @relation(fields: [issued_by], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "invoices_issued_by_foreign")
+  rentals        rentals?         @relation(fields: [rental_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "invoices_rental_id_foreign")
+  ledger_entries ledger_entries[]
+  tolls_tickets  tolls_tickets[]
+
+  @@index([driver_id], map: "invoices_driver_id_index")
+  @@index([due_date], map: "invoices_due_date_index")
+  @@index([issue_date], map: "invoices_issue_date_index")
+  @@index([issued_by], map: "invoices_issued_by_index")
+  @@index([rental_id], map: "invoices_rental_id_index")
+  @@index([status], map: "invoices_status_index")
+}
+
+model knex_migrations {
+  id             Int      @id @default(autoincrement()) @db.UnsignedInt
+  name           String?  @db.VarChar(255)
+  batch          Int?
+  migration_time DateTime @default(now()) @db.Timestamp(0)
+}
+
+model knex_migrations_lock {
+  index     Int  @id @default(autoincrement()) @db.UnsignedInt
+  is_locked Int?
+}
+
+model ledger_entries {
+  id             BigInt                         @id @default(autoincrement()) @db.UnsignedBigInt
+  rental_id      BigInt?                        @db.UnsignedBigInt
+  driver_id      BigInt?                        @db.UnsignedBigInt
+  invoice_id     BigInt?                        @db.UnsignedBigInt
+  recorded_by    BigInt?                        @db.UnsignedBigInt
+  entry_type     ledger_entries_entry_type
+  amount         Decimal                        @db.Decimal(12, 2)
+  payment_method ledger_entries_payment_method?
+  reference_no   String?                        @db.VarChar(100)
+  notes          String?                        @db.Text
+  entry_date     DateTime                       @db.DateTime(0)
+  created_at     DateTime                       @default(now()) @db.Timestamp(0)
+  updated_at     DateTime                       @default(now()) @db.Timestamp(0)
+  category       String?                        @db.VarChar(100)
+  description    String?                        @db.Text
+  status         String?                        @default("Posted") @db.VarChar(50)
+  qbo_ref        String?                        @db.VarChar(100)
+  driver_name    String?                        @db.VarChar(150)
+  rental_code    String?                        @db.VarChar(100)
+  metadata       String?                        @db.LongText
+  drivers        drivers?                       @relation(fields: [driver_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "ledger_entries_driver_id_foreign")
+  invoices       invoices?                      @relation(fields: [invoice_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "ledger_entries_invoice_id_foreign")
+  users          users?                         @relation(fields: [recorded_by], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "ledger_entries_recorded_by_foreign")
+  rentals        rentals?                       @relation(fields: [rental_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "ledger_entries_rental_id_foreign")
+
+  @@index([driver_id], map: "ledger_entries_driver_id_index")
+  @@index([entry_date], map: "ledger_entries_entry_date_index")
+  @@index([entry_type], map: "ledger_entries_entry_type_index")
+  @@index([invoice_id], map: "ledger_entries_invoice_id_index")
+  @@index([recorded_by], map: "ledger_entries_recorded_by_index")
+  @@index([reference_no], map: "ledger_entries_reference_no_index")
+  @@index([rental_id], map: "ledger_entries_rental_id_index")
+}
+
+model maintenance_records {
+  id                    BigInt                     @id @default(autoincrement()) @db.UnsignedBigInt
+  vehicle_id            BigInt                     @db.UnsignedBigInt
+  vendor_id             BigInt?                    @db.UnsignedBigInt
+  service_date          DateTime                   @db.Date
+  odometer              Int
+  service_type          String                     @db.VarChar(150)
+  description           String?                    @db.Text
+  cost                  Decimal                    @db.Decimal(12, 2)
+  invoice_url           String?                    @db.VarChar(500)
+  next_service_odometer Int?
+  next_service_date     DateTime?                  @db.Date
+  status                maintenance_records_status @default(scheduled)
+  created_at            DateTime                   @default(now()) @db.Timestamp(0)
+  updated_at            DateTime                   @default(now()) @db.Timestamp(0)
+  vehicles              vehicles                   @relation(fields: [vehicle_id], references: [id], onUpdate: Restrict, map: "maintenance_records_vehicle_id_foreign")
+  vendors               vendors?                   @relation(fields: [vendor_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "maintenance_records_vendor_id_foreign")
+
+  @@index([service_date], map: "maintenance_records_service_date_index")
+  @@index([status], map: "maintenance_records_status_index")
+  @@index([vehicle_id], map: "maintenance_records_vehicle_id_index")
+  @@index([vendor_id], map: "maintenance_records_vendor_id_index")
+}
+
+model mfa_backup_codes {
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id    BigInt    @db.UnsignedBigInt
+  code_hash  String    @db.VarChar(255)
+  used_at    DateTime? @db.Timestamp(0)
+  created_at DateTime  @default(now()) @db.Timestamp(0)
+  updated_at DateTime  @default(now()) @db.Timestamp(0)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "mfa_backup_codes_user_id_foreign")
+
+  @@index([user_id], map: "mfa_backup_codes_user_id_index")
+}
+
+model notification_rules {
+  id             BigInt                     @id @default(autoincrement()) @db.UnsignedBigInt
+  event_type     String                     @unique(map: "notification_rules_event_type_unique") @db.VarChar(100)
+  title          String                     @db.VarChar(200)
+  channel        notification_rules_channel @default(email)
+  lead_time_days Int                        @default(0)
+  recipients     String?                    @db.LongText
+  is_active      Boolean                    @default(true)
+  created_at     DateTime                   @default(now()) @db.Timestamp(0)
+  updated_at     DateTime                   @default(now()) @db.Timestamp(0)
+  alert_history  alert_history[]
+
+  @@index([event_type], map: "notification_rules_event_type_index")
+  @@index([is_active], map: "notification_rules_is_active_index")
+}
+
+model password_resets {
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id    BigInt    @db.UnsignedBigInt
+  token_hash String    @db.VarChar(255)
+  expires_at DateTime  @default(now()) @db.Timestamp(0)
+  used_at    DateTime? @db.Timestamp(0)
+  created_at DateTime  @default(now()) @db.Timestamp(0)
+  updated_at DateTime  @default(now()) @db.Timestamp(0)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "password_resets_user_id_foreign")
+
+  @@index([token_hash], map: "password_resets_token_hash_index")
+  @@index([user_id], map: "password_resets_user_id_index")
+}
+
+model refresh_tokens {
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id    BigInt    @db.UnsignedBigInt
+  token_hash String    @db.VarChar(255)
+  expires_at DateTime  @default(now()) @db.Timestamp(0)
+  revoked_at DateTime? @db.Timestamp(0)
+  created_at DateTime  @default(now()) @db.Timestamp(0)
+  updated_at DateTime  @default(now()) @db.Timestamp(0)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "refresh_tokens_user_id_foreign")
+
+  @@index([expires_at], map: "refresh_tokens_expires_at_index")
+  @@index([token_hash], map: "refresh_tokens_token_hash_index")
+  @@index([user_id], map: "refresh_tokens_user_id_index")
+}
+
+model rental_amendments {
+  id                   BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  rental_id            BigInt    @db.UnsignedBigInt
+  amended_by           BigInt?   @db.UnsignedBigInt
+  amendment_type       String    @db.VarChar(100)
+  previous_end_date    DateTime? @db.Date
+  new_end_date         DateTime? @db.Date
+  previous_weekly_rate Decimal?  @db.Decimal(12, 2)
+  new_weekly_rate      Decimal?  @db.Decimal(12, 2)
+  reason               String?   @db.Text
+  created_at           DateTime  @default(now()) @db.Timestamp(0)
+  updated_at           DateTime  @default(now()) @db.Timestamp(0)
+  users                users?    @relation(fields: [amended_by], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "rental_amendments_amended_by_foreign")
+  rentals              rentals   @relation(fields: [rental_id], references: [id], onUpdate: Restrict, map: "rental_amendments_rental_id_foreign")
+
+  @@index([amended_by], map: "rental_amendments_amended_by_index")
+  @@index([rental_id], map: "rental_amendments_rental_id_index")
+}
+
+model rental_signatures {
+  id             BigInt                        @id @default(autoincrement()) @db.UnsignedBigInt
+  rental_id      BigInt                        @db.UnsignedBigInt
+  signer_name    String                        @db.VarChar(255)
+  signer_role    rental_signatures_signer_role
+  signature_data String                        @db.LongText
+  ip_address     String?                       @db.VarChar(50)
+  signed_at      DateTime                      @db.DateTime(0)
+  created_at     DateTime                      @default(now()) @db.Timestamp(0)
+  updated_at     DateTime                      @default(now()) @db.Timestamp(0)
+  rentals        rentals                       @relation(fields: [rental_id], references: [id], onUpdate: Restrict, map: "rental_signatures_rental_id_foreign")
+
+  @@index([rental_id], map: "rental_signatures_rental_id_index")
+  @@index([signed_at], map: "rental_signatures_signed_at_index")
+}
+
+model rentals {
+  id                BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
+  contract_no       String              @unique(map: "rentals_contract_no_unique") @db.VarChar(100)
+  vehicle_id        BigInt              @db.UnsignedBigInt
+  driver_id         BigInt              @db.UnsignedBigInt
+  created_by        BigInt?             @db.UnsignedBigInt
+  status            rentals_status      @default(draft)
+  start_date        DateTime            @db.Date
+  end_date          DateTime            @db.Date
+  weekly_rate       Decimal             @db.Decimal(12, 2)
+  deposit_amount    Decimal             @default(0.00) @db.Decimal(12, 2)
+  mileage_at_pickup Int                 @default(0)
+  mileage_at_return Int?
+  terms             String?             @db.Text
+  created_at        DateTime            @default(now()) @db.Timestamp(0)
+  updated_at        DateTime            @default(now()) @db.Timestamp(0)
+  accidents         accidents[]
+  documents         documents[]
+  expenses          expenses[]
+  inspections       inspections[]
+  invoices          invoices[]
+  ledger_entries    ledger_entries[]
+  rental_amendments rental_amendments[]
+  rental_signatures rental_signatures[]
+  users             users?              @relation(fields: [created_by], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "rentals_created_by_foreign")
+  drivers           drivers             @relation(fields: [driver_id], references: [id], onUpdate: Restrict, map: "rentals_driver_id_foreign")
+  vehicles          vehicles            @relation(fields: [vehicle_id], references: [id], onUpdate: Restrict, map: "rentals_vehicle_id_foreign")
+  tolls_tickets     tolls_tickets[]
+
+  @@index([created_by], map: "rentals_created_by_index")
+  @@index([driver_id], map: "rentals_driver_id_index")
+  @@index([end_date], map: "rentals_end_date_index")
+  @@index([start_date], map: "rentals_start_date_index")
+  @@index([status], map: "rentals_status_index")
+  @@index([vehicle_id], map: "rentals_vehicle_id_index")
+}
+
+model settings {
+  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  setting_key   String   @unique(map: "settings_setting_key_unique") @db.VarChar(100)
+  setting_value String?  @db.Text
+  description   String?  @db.VarChar(255)
+  created_at    DateTime @default(now()) @db.Timestamp(0)
+  updated_at    DateTime @default(now()) @db.Timestamp(0)
+
+  @@index([setting_key], map: "settings_setting_key_index")
+}
+
+model tolls_tickets {
+  id                BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  vehicle_id        BigInt               @db.UnsignedBigInt
+  driver_id         BigInt?              @db.UnsignedBigInt
+  rental_id         BigInt?              @db.UnsignedBigInt
+  violation_number  String               @db.VarChar(100)
+  violation_date    DateTime             @db.DateTime(0)
+  issuing_authority String               @db.VarChar(150)
+  violation_type    String               @default("toll") @db.VarChar(150)
+  amount            Decimal              @db.Decimal(12, 2)
+  due_date          DateTime?            @db.Date
+  status            tolls_tickets_status @default(unassigned)
+  driver_charged    Boolean              @default(false)
+  invoice_id        BigInt?              @db.UnsignedBigInt
+  notes             String?              @db.Text
+  created_at        DateTime             @default(now()) @db.Timestamp(0)
+  updated_at        DateTime             @default(now()) @db.Timestamp(0)
+  location          String?              @db.VarChar(255)
+  received_date     DateTime?            @db.Date
+  admin_fee         Decimal?             @default(15.00) @db.Decimal(10, 2)
+  driver_charge     Decimal?             @db.Decimal(10, 2)
+  balance           Decimal?             @db.Decimal(10, 2)
+  proof_file_name   String?              @db.VarChar(255)
+  proof_file_url    String?              @db.Text
+  proof_file_size   String?              @db.VarChar(50)
+  contract_number   String?              @db.VarChar(100)
+  is_toll           Boolean              @default(false)
+  drivers           drivers?             @relation(fields: [driver_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "tolls_tickets_driver_id_foreign")
+  invoices          invoices?            @relation(fields: [invoice_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "tolls_tickets_invoice_id_foreign")
+  rentals           rentals?             @relation(fields: [rental_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "tolls_tickets_rental_id_foreign")
+  vehicles          vehicles             @relation(fields: [vehicle_id], references: [id], onUpdate: Restrict, map: "tolls_tickets_vehicle_id_foreign")
+
+  @@index([driver_id], map: "tolls_tickets_driver_id_index")
+  @@index([invoice_id], map: "tolls_tickets_invoice_id_index")
+  @@index([rental_id], map: "tolls_tickets_rental_id_index")
+  @@index([status], map: "tolls_tickets_status_index")
+  @@index([vehicle_id], map: "tolls_tickets_vehicle_id_index")
+  @@index([violation_date], map: "tolls_tickets_violation_date_index")
+  @@index([violation_number], map: "tolls_tickets_violation_number_index")
+}
+
+model users {
+  id                                                       BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  name                                                     String                @db.VarChar(255)
+  email                                                    String                @unique(map: "users_email_unique") @db.VarChar(255)
+  password_hash                                            String                @db.VarChar(255)
+  role                                                     users_role            @default(readonly_manager)
+  status                                                   users_status          @default(active)
+  phone                                                    String?               @db.VarChar(50)
+  mfa_enabled                                              Boolean               @default(false)
+  mfa_secret                                               String?               @db.VarChar(255)
+  created_at                                               DateTime              @default(now()) @db.Timestamp(0)
+  updated_at                                               DateTime              @default(now()) @db.Timestamp(0)
+  alert_history                                            alert_history[]
+  audit_logs                                               audit_logs[]
+  document_versions                                        document_versions[]
+  documents                                                documents[]
+  employee_paperwork_employee_paperwork_reviewed_byTousers employee_paperwork[]  @relation("employee_paperwork_reviewed_byTousers")
+  employee_paperwork_employee_paperwork_user_idTousers     employee_paperwork[]  @relation("employee_paperwork_user_idTousers")
+  expenses_expenses_approver_idTousers                     expenses[]            @relation("expenses_approver_idTousers")
+  expenses_expenses_recorded_byTousers                     expenses[]            @relation("expenses_recorded_byTousers")
+  inspections                                              inspections[]
+  invitations                                              invitations[]
+  invoices                                                 invoices[]
+  ledger_entries                                           ledger_entries[]
+  mfa_backup_codes                                         mfa_backup_codes[]
+  password_resets                                          password_resets[]
+  refresh_tokens                                           refresh_tokens[]
+  rental_amendments                                        rental_amendments[]
+  rentals                                                  rentals[]
+  vehicle_assignments                                      vehicle_assignments[]
+
+  @@index([email], map: "users_email_index")
+  @@index([role], map: "users_role_index")
+  @@index([status], map: "users_status_index")
+}
+
+model vehicle_assignments {
+  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  vehicle_id  BigInt    @db.UnsignedBigInt
+  driver_id   BigInt    @db.UnsignedBigInt
+  assigned_by BigInt?   @db.UnsignedBigInt
+  start_date  DateTime  @db.DateTime(0)
+  end_date    DateTime? @db.DateTime(0)
+  notes       String?   @db.Text
+  created_at  DateTime  @default(now()) @db.Timestamp(0)
+  updated_at  DateTime  @default(now()) @db.Timestamp(0)
+  users       users?    @relation(fields: [assigned_by], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "vehicle_assignments_assigned_by_foreign")
+  drivers     drivers   @relation(fields: [driver_id], references: [id], onUpdate: Restrict, map: "vehicle_assignments_driver_id_foreign")
+  vehicles    vehicles  @relation(fields: [vehicle_id], references: [id], onUpdate: Restrict, map: "vehicle_assignments_vehicle_id_foreign")
+
+  @@index([assigned_by], map: "vehicle_assignments_assigned_by_index")
+  @@index([driver_id], map: "vehicle_assignments_driver_id_index")
+  @@index([end_date], map: "vehicle_assignments_end_date_index")
+  @@index([start_date], map: "vehicle_assignments_start_date_index")
+  @@index([vehicle_id], map: "vehicle_assignments_vehicle_id_index")
+}
+
+model vehicles {
+  id                  BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  vin                 String                @unique(map: "vehicles_vin_unique") @db.VarChar(50)
+  plate               String                @unique(map: "vehicles_plate_unique") @db.VarChar(50)
+  make                String                @db.VarChar(100)
+  model               String                @db.VarChar(100)
+  year                Int
+  color               String?               @db.VarChar(50)
+  mileage             Int                   @default(0)
+  status              vehicles_status       @default(available)
+  purchase_date       DateTime?             @db.Date
+  purchase_price      Decimal?              @db.Decimal(12, 2)
+  financing_details   String?               @db.Text
+  location            String?               @db.VarChar(255)
+  archived_at         DateTime?             @db.Timestamp(0)
+  created_at          DateTime              @default(now()) @db.Timestamp(0)
+  updated_at          DateTime              @default(now()) @db.Timestamp(0)
+  accidents           accidents[]
+  documents           documents[]
+  expenses            expenses[]
+  inspections         inspections[]
+  insurance_claims    insurance_claims[]
+  insurance_policies  insurance_policies[]
+  maintenance_records maintenance_records[]
+  rentals             rentals[]
+  tolls_tickets       tolls_tickets[]
+  vehicle_assignments vehicle_assignments[]
+
+  @@index([archived_at], map: "vehicles_archived_at_index")
+  @@index([make, model], map: "vehicles_make_model_index")
+  @@index([status], map: "vehicles_status_index")
+}
+
+model vendors {
+  id                  BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  name                String                @db.VarChar(200)
+  service_type        String?               @db.VarChar(100)
+  contact_person      String?               @db.VarChar(150)
+  email               String?               @db.VarChar(255)
+  phone               String?               @db.VarChar(50)
+  address             String?               @db.Text
+  status              vendors_status        @default(active)
+  created_at          DateTime              @default(now()) @db.Timestamp(0)
+  updated_at          DateTime              @default(now()) @db.Timestamp(0)
+  terms               String?               @default("Net 30") @db.VarChar(50)
+  notes               String?               @db.Text
+  category            String?               @default("repairs") @db.VarChar(100)
+  expenses            expenses[]
+  maintenance_records maintenance_records[]
+
+  @@index([name], map: "vendors_name_index")
+  @@index([service_type], map: "vendors_service_type_index")
+  @@index([status], map: "vendors_status_index")
+}
+
+model compliance_records {
+  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  category      String   @db.VarChar(100)
+  title         String   @db.VarChar(255)
+  entity_type   String   @db.VarChar(50)
+  entity_name   String   @db.VarChar(255)
+  entity_id     String?  @db.VarChar(100)
+  identifier    String?  @db.VarChar(100)
+  authority     String   @db.VarChar(255)
+  expiry_date   DateTime @db.Date
+  document_file String?  @db.VarChar(255)
+  status        String   @db.VarChar(50)
+  notes         String?  @db.Text
+  created_at    DateTime @default(now()) @db.Timestamp(0)
+  updated_at    DateTime @default(now()) @db.Timestamp(0)
+
+  @@index([category], map: "compliance_records_category_index")
+  @@index([expiry_date], map: "compliance_records_expiry_date_index")
+  @@index([status], map: "compliance_records_status_index")
+}
+
+enum invitations_role {
+  owner
+  secondary_admin
+  finance
+  fleet_maintenance
+  rental_operations
+  readonly_manager
+}
+
+enum invoice_items_category {
+  insurance
+  registration
+  oil_change
+  repairs
+  tires
+  towing
+  cleaning
+  tolls
+  parking
+  tickets
+  marketing
+  software
+  bank_fees
+  office
+  legal_accounting
+  other
+}
+
+enum notification_rules_channel {
+  email
+  sms
+  both
+}
+
+enum rental_signatures_signer_role {
+  driver
+  owner
+  manager
+}
+
+enum alert_history_severity {
+  info
+  warning
+  danger
+}
+
+enum inspections_inspection_type {
+  pickup
+  return
+  routine
+}
+
+enum inspection_photos_tag {
+  exterior_front
+  exterior_back
+  exterior_left
+  exterior_right
+  interior
+  dashboard_odometer
+  damage_detail
+  other
+}
+
+enum users_role {
+  owner
+  secondary_admin
+  finance
+  fleet_maintenance
+  rental_operations
+  readonly_manager
+}
+
+enum ledger_entries_entry_type {
+  charge
+  payment
+  deposit
+  refund
+  credit
+  adjustment
+  reversal
+}
+
+enum rentals_status {
+  draft
+  awaiting_signature
+  active
+  renewed
+  terminated
+  completed
+}
+
+enum users_status {
+  active
+  inactive
+  suspended
+}
+
+enum expenses_category {
+  insurance
+  registration
+  oil_change
+  repairs
+  tires
+  towing
+  cleaning
+  tolls
+  parking
+  tickets
+  marketing
+  software
+  bank_fees
+  office
+  legal_accounting
+  other
+}
+
+enum ledger_entries_payment_method {
+  cash
+  zelle
+  stripe
+  card
+  bank_transfer
+  credit
+  adjustment
+}
+
+enum vendors_status {
+  active
+  inactive
+}
+
+enum drivers_status {
+  active
+  inactive
+  suspended
+  pending
+}
+
+enum vehicles_status {
+  available
+  reserved
+  rented
+  maintenance
+  unavailable
+  sold_retired
+}
+
+enum accidents_status {
+  reported
+  under_investigation
+  repair_pending
+  resolved
+}
+
+enum insurance_claims_status {
+  submitted
+  under_review
+  approved
+  denied
+  settled
+}
+
+enum insurance_policies_status {
+  active
+  expired
+  cancelled
+}
+
+enum employee_paperwork_status {
+  draft
+  submitted
+  under_review
+  approved
+  rejected
+}
+
+enum tolls_tickets_status {
+  unassigned
+  under_review
+  assigned
+  charged
+  paid
+  disputed
+}
+
+enum maintenance_records_status {
+  scheduled
+  in_progress
+  completed
+  cancelled
+}
+
+enum expenses_status {
+  pending
+  approved
+  rejected
+  paid
+}
+
+enum invoices_status {
+  draft
+  issued
+  partially_paid
+  paid
+  overdue
+  cancelled
+  void
+}
