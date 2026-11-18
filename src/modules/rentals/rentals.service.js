@@ -1,5 +1,16 @@
 const prisma = require('../../config/prisma');
 
+function safeFormatDate(d, fallback = '2026-11-17') {
+  if (!d) return fallback;
+  if (typeof d === 'string') return d.split('T')[0];
+  if (d instanceof Date && !isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  try {
+    const parsed = new Date(d);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+  } catch (err) {}
+  return fallback;
+}
+
 function formatRental(r) {
   const v = r.vehicles;
   const d = r.drivers;
@@ -29,8 +40,13 @@ function formatRental(r) {
       ? 'Draft'
       : 'Signed';
 
+  const startStr = safeFormatDate(r.start_date, '2026-11-17');
+  const endStr = safeFormatDate(r.end_date, '2026-12-01');
+  const rawContract = r.contract_no ? String(r.contract_no) : `RNT-${String(r.id || 1001)}`;
+  const agreementDigits = rawContract.replace(/[^0-9]/g, '').slice(-4) || '1001';
+
   return {
-    id: r.contract_no,
+    id: rawContract,
     dbId: Number(r.id),
     customer: driverName,
     customerPhone: d?.phone || '',
@@ -39,8 +55,8 @@ function formatRental(r) {
     vehicleId: v ? `VEH-${String(v.id).padStart(3, '0')}` : null,
     driver: driverName,
     driverId: d ? `DRV-${String(Number(d.id) + 100).padStart(3, '0')}` : null,
-    startDate: r.start_date ? r.start_date.toISOString().split('T')[0] : '2026-11-17',
-    endDate: r.end_date ? r.end_date.toISOString().split('T')[0] : '2026-12-01',
+    startDate: startStr,
+    endDate: endStr,
     rentalType: 'Commercial Weekly',
     pickupLocation: 'JFK Airport Fleet Hub',
     dropoffLocation: 'Manhattan Financial Center',
@@ -53,7 +69,7 @@ function formatRental(r) {
     status: statusStr,
     paymentMethod: 'Corporate ACH',
     notes: r.terms || 'Commercial fleet lease agreement.',
-    pickupDateTime: `${r.start_date ? r.start_date.toISOString().split('T')[0] : '2026-11-17'}T09:00:00`,
+    pickupDateTime: `${startStr}T09:00:00`,
     pickupOdometer: r.mileage_at_pickup || 24500,
     pickupFuelLevel: 'Full (100%)',
     pickupCondition: 'Pristine / No visible damage',
@@ -75,8 +91,8 @@ function formatRental(r) {
     },
     driverSignature: driverName,
     representativeSignature: 'Marcus Brody (Owner)',
-    signedAt: `${r.start_date ? r.start_date.toISOString().split('T')[0] : '2026-11-17'}T09:15:00`,
-    agreementId: `AGR-${r.contract_no.replace(/[^0-9]/g, '').slice(-4) || '1001'}`,
+    signedAt: `${startStr}T09:15:00`,
+    agreementId: `AGR-${agreementDigits}`,
     returnDateTime: null,
     returnOdometer: null,
     returnFuelLevel: null,

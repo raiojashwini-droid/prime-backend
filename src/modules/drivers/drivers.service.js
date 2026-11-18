@@ -8,6 +8,17 @@ const AVATARS = [
   'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'
 ];
 
+function safeFormatDate(d, fallback = '2026-12-31') {
+  if (!d) return fallback;
+  if (typeof d === 'string') return d.split('T')[0];
+  if (d instanceof Date && !isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  try {
+    const parsed = new Date(d);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+  } catch (err) {}
+  return fallback;
+}
+
 function formatDriver(d) {
   const activeRental = d.rentals && d.rentals[0];
   const vehicleName = activeRental?.vehicles
@@ -33,7 +44,7 @@ function formatDriver(d) {
     phone: d.phone,
     email: d.email,
     license: d.license_number,
-    licenseExpiry: d.license_expiry ? d.license_expiry.toISOString().split('T')[0] : '2026-12-31',
+    licenseExpiry: safeFormatDate(d.license_expiry, '2026-12-31'),
     vehicle: vehicleName,
     vehicleId: activeRental?.vehicle_id ? `VEH-${String(activeRental.vehicle_id).padStart(3, '0')}` : null,
     status: statusMap[d.status] || 'Active',
