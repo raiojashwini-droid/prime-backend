@@ -218,8 +218,11 @@ async function autoInitDatabase() {
     }
 
     // 5. Ensure employee paperwork baseline
-    const paperCount = await db('employee_paperwork').count('id as cnt').first();
+    const paperCount = await db('employee_paperwork').count('id as cnt').first().catch(() => null);
     if (Number(paperCount?.cnt || 0) === 0) {
+      const firstUser = await db('users').first().catch(() => null);
+      const firstDriver = await db('drivers').first().catch(() => null);
+
       const paperworkPayload = {
         personal: {
           firstName: 'David',
@@ -228,63 +231,54 @@ async function autoInitDatabase() {
           phone: '+1 (555) 349-1029',
           dob: '1992-06-14',
           address: '742 Evergreen Terrace',
-          city: 'Springfield',
-          state: 'OR',
-          zip: '97477',
-          ssnLast4: '4829',
-          emergencyName: 'Sarah Miller',
-          emergencyPhone: '+1 (555) 981-2231',
-          emergencyRelation: 'Spouse'
+          city: 'Queens',
+          state: 'NY',
+          zipCode: '11375',
+          emergencyContactName: 'Sarah Miller',
+          emergencyContactPhone: '+1 (555) 902-4821'
         },
         employment: {
-          position: 'Fleet Technician & Detailer',
-          department: 'Operations',
-          startDate: '2024-03-15',
-          manager: 'Marcus Brody',
+          employeeId: 'PR-EMP-2026',
+          position: 'Logistics Fleet Driver',
+          department: 'Fleet Operations',
           employmentType: 'Full-Time',
-          bankName: 'Chase Commercial',
-          routingNumber: '••••4812',
-          accountNumber: '••••••••8819',
-          taxStatus: 'W-4 Single (1 Allowance)'
+          joiningDate: '2026-03-01',
+          assignedManager: 'Elena Vance'
         },
         documents: {
-          driversLicense: { name: 'DL_DavidMiller_2026.pdf', size: '2.4 MB', uploadedAt: '2024-03-12' },
-          w4Form: { name: 'W4_Signed_2024.pdf', size: '1.1 MB', uploadedAt: '2024-03-14' },
-          i9Verification: { name: 'I9_Verification_Miller.pdf', size: '3.8 MB', uploadedAt: '2024-03-14' },
-          directDepositVoidCheck: { name: 'VoidCheck_Chase.pdf', size: '890 KB', uploadedAt: '2024-03-13' }
+          governmentId: { name: 'US_Passport_DMiller.pdf', size: '2.4 MB', uploadedAt: '2026-11-04' },
+          drivingLicense: { name: 'NY_Driver_License_ClassD.pdf', size: '1.8 MB', uploadedAt: '2026-11-04' },
+          taxDocuments: { name: 'W4_Signed_2026.pdf', size: '1.1 MB', uploadedAt: '2026-11-04' },
+          bankDetails: { name: 'DirectDeposit_VoidCheck.pdf', size: '890 KB', uploadedAt: '2026-11-04' },
+          otherDocuments: null
         },
         agreements: {
-          handbookAcknowledged: true,
-          confidentialitySigned: true,
-          safetyPolicyAgreed: true,
-          directDepositConsent: true,
-          electronicSignature: 'David Miller',
-          signedDate: '2024-03-14'
+          codeOfConduct: true,
+          safetyPolicy: true,
+          digitalSignature: 'David Miller',
+          acceptedTerms: true
         }
       };
 
-      await db('employee_paperwork').insert([
-        {
-          id: 1,
-          user_id: 1,
-          driver_id: 2,
-          full_name: 'David Miller',
-          ssn_last4: '4829',
-          dob: '1992-06-14',
-          address: '742 Evergreen Terrace, Springfield, OR 97477',
-          phone: '+1 (555) 349-1029',
-          emergency_contact: JSON.stringify({ name: 'Sarah Miller', phone: '+1 (555) 981-2231', relation: 'Spouse' }),
-          direct_deposit_details: JSON.stringify({ bank: 'Chase Commercial', routing: '••••4812', account: '••••••••8819' }),
-          status: 'submitted',
-          submitted_at: '2026-11-12 10:30:00',
-          reviewed_by: null,
-          review_notes: 'Under review by Operations Director Elena Vance.',
-          signature_url: 'David Miller',
-          form_data: JSON.stringify(paperworkPayload),
-          created_at: db.fn.now(),
-          updated_at: db.fn.now()
-        }
-      ]).catch(() => {});
+      await db('employee_paperwork').insert({
+        user_id: firstUser?.id || null,
+        driver_id: firstDriver?.id || null,
+        full_name: 'David Miller',
+        ssn_last4: '4829',
+        dob: '1992-06-14',
+        address: '742 Evergreen Terrace, Queens, NY 11375',
+        phone: '+1 (555) 349-1029',
+        emergency_contact: JSON.stringify({ name: 'Sarah Miller', phone: '+1 (555) 902-4821', relation: 'Spouse' }),
+        direct_deposit_details: JSON.stringify({ bank: 'Chase Commercial', routing: '••••4812', account: '••••••••8819' }),
+        status: 'submitted',
+        submitted_at: '2026-11-12 10:30:00',
+        reviewed_by: null,
+        review_notes: 'Under review by Operations Director Elena Vance.',
+        signature_url: 'David Miller',
+        form_data: JSON.stringify(paperworkPayload),
+        created_at: db.fn.now(),
+        updated_at: db.fn.now()
+      }).catch((e) => logger.warn(`[AUTO-INIT] Paperwork init note: ${e.message}`));
     }
 
     logger.info('[AUTO-INIT] Baseline data verification completed successfully.');
