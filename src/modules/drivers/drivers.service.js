@@ -8,6 +8,17 @@ const AVATARS = [
   'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'
 ];
 
+function safeFormatDate(d, fallback = '2026-12-31') {
+  if (!d) return fallback;
+  if (typeof d === 'string') return d.split('T')[0];
+  if (d instanceof Date && !isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  try {
+    const parsed = new Date(d);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+  } catch (err) {}
+  return fallback;
+}
+
 function formatDriver(d) {
   const activeRental = d.rentals && d.rentals[0];
   const vehicleName = activeRental?.vehicles
@@ -24,6 +35,15 @@ function formatDriver(d) {
   const idNum = Number(d.id);
   const formattedId = `DRV-${String(idNum + 100).padStart(3, '0')}`;
 
+  let meta = {};
+  if (d.notes) {
+    try {
+      meta = JSON.parse(d.notes);
+    } catch (e) {
+      meta = { notes: d.notes };
+    }
+  }
+
   return {
     id: formattedId,
     dbId: idNum,
@@ -33,43 +53,56 @@ function formatDriver(d) {
     phone: d.phone,
     email: d.email,
     license: d.license_number,
-    licenseExpiry: d.license_expiry ? d.license_expiry.toISOString().split('T')[0] : '2026-12-31',
+    licenseExpiry: safeFormatDate(d.license_expiry, '2026-12-31'),
+    licenseState: d.license_state || 'NY',
     vehicle: vehicleName,
     vehicleId: activeRental?.vehicle_id ? `VEH-${String(activeRental.vehicle_id).padStart(3, '0')}` : null,
     status: statusMap[d.status] || 'Active',
     balance: Number(d.balance) || 0,
     depositHeld: Number(d.deposit_held) || 500,
-    address: '142 W 57th St, New York, NY 10019',
-    dob: '1988-04-12',
-    joiningDate: '2023-02-15',
-    emergencyContact: 'Rachel Vance (+1 555-901-2244)',
-    rating: 4.8 + ((idNum % 3) * 0.1),
-    tripsCount: 150 + (idNum * 8),
-    avatar: AVATARS[idNum % AVATARS.length],
-    salaryRate: '$2,400/mo'
+    address: meta.address || '142 W 57th St, New York, NY 10019',
+    dob: meta.dob || '1988-04-12',
+    joiningDate: meta.joiningDate || meta.startDate || safeFormatDate(d.created_at, '2023-02-15'),
+    startDate: meta.startDate || meta.joiningDate || safeFormatDate(d.created_at, '2023-02-15'),
+    emergencyContact: meta.emergencyContact || 'Rachel Vance (+1 555-901-2244)',
+    rating: Number(meta.rating) || (4.8 + ((idNum % 3) * 0.1)),
+    tripsCount: Number(meta.tripsCount) || (150 + (idNum * 8)),
+    avatar: meta.avatar || AVATARS[idNum % AVATARS.length],
+    salaryRate: meta.salaryRate || '$2,400/mo',
+    notes: meta.notes || (typeof d.notes === 'string' && !d.notes.startsWith('{') ? d.notes : '')
   };
 }
 
 async function getAllDrivers() {
-  const list = await prisma.drivers.findMany({
+  const drivers = await prisma.drivers.findMany({
     where: { archived_at: null },
-    include: {
-      rentals: {
-        where: { status: 'active' },
-        include: {
-          vehicles: true
-        }
-      }
-    },
     orderBy: { id: 'asc' }
   });
 
-  return list.map(formatDriver);
+  const activeRentals = await prisma.rentals.findMany({
+    where: { status: 'active' }
+  }).catch(() => []);
+
+  const vehicles = await prisma.vehicles.findMany().catch(() => []);
+  const vehicleMap = new Map(vehicles.map((v) => [String(v.id), v]));
+
+  const rentalsByDriver = new Map();
+  for (const r of activeRentals) {
+    const v = r.vehicle_id ? vehicleMap.get(String(r.vehicle_id)) || null : null;
+    rentalsByDriver.set(String(r.driver_id), [{ ...r, vehicles: v }]);
+  }
+
+  return drivers.map((d) => {
+    const driverRentals = rentalsByDriver.get(String(d.id)) || [];
+    return formatDriver({ ...d, rentals: driverRentals });
+  });
 }
 
 async function findDriverEntity(id) {
   if (!id) return null;
   const strId = String(id).trim();
+
+  let d = null;
 
   // 1. DRV-xxx pattern
   if (strId.toUpperCase().startsWith('DRV-')) {
@@ -77,42 +110,55 @@ async function findDriverEntity(id) {
     if (!isNaN(numPart)) {
       const offsetId = numPart - 100;
       if (offsetId > 0) {
-        const byOffset = await prisma.drivers.findFirst({
-          where: { id: BigInt(offsetId) },
-          include: { rentals: { where: { status: 'active' }, include: { vehicles: true } } }
-        });
-        if (byOffset) return byOffset;
+        d = await prisma.drivers.findFirst({
+          where: { id: BigInt(offsetId) }
+        }).catch(() => null);
       }
-      const byDirect = await prisma.drivers.findFirst({
-        where: { id: BigInt(numPart) },
-        include: { rentals: { where: { status: 'active' }, include: { vehicles: true } } }
-      });
-      if (byDirect) return byDirect;
+      if (!d) {
+        d = await prisma.drivers.findFirst({
+          where: { id: BigInt(numPart) }
+        }).catch(() => null);
+      }
     }
   }
 
   // 2. Direct numeric ID
-  if (!isNaN(Number(strId))) {
-    const byId = await prisma.drivers.findFirst({
-      where: { id: BigInt(strId) },
-      include: { rentals: { where: { status: 'active' }, include: { vehicles: true } } }
-    });
-    if (byId) return byId;
+  if (!d && !isNaN(Number(strId))) {
+    d = await prisma.drivers.findFirst({
+      where: { id: BigInt(strId) }
+    }).catch(() => null);
   }
 
   // 3. By license number or email
-  const byLicenseOrEmail = await prisma.drivers.findFirst({
-    where: {
-      OR: [
-        { license_number: strId },
-        { email: strId }
-      ]
-    },
-    include: { rentals: { where: { status: 'active' }, include: { vehicles: true } } }
-  });
-  if (byLicenseOrEmail) return byLicenseOrEmail;
+  if (!d) {
+    d = await prisma.drivers.findFirst({
+      where: {
+        OR: [
+          { license_number: strId },
+          { email: strId }
+        ]
+      }
+    }).catch(() => null);
+  }
 
-  return null;
+  if (!d) return null;
+
+  // Safely find active rental & vehicle without relational join crashes
+  const activeRental = await prisma.rentals.findFirst({
+    where: { driver_id: d.id, status: 'active' }
+  }).catch(() => null);
+
+  let vehicle = null;
+  if (activeRental && activeRental.vehicle_id) {
+    vehicle = await prisma.vehicles.findFirst({
+      where: { id: activeRental.vehicle_id }
+    }).catch(() => null);
+  }
+
+  return {
+    ...d,
+    rentals: activeRental ? [{ ...activeRental, vehicles: vehicle }] : []
+  };
 }
 
 async function getDriverById(id) {
@@ -147,6 +193,20 @@ async function createDriver(data) {
   const cleanLicense = (data.license || `DL-NY-${Date.now().toString().slice(-7)}`).trim().toUpperCase();
   const cleanEmail = (data.email || `driver${Date.now()}@primeroute.io`).trim().toLowerCase();
 
+  const metaData = {
+    address: data.address || '',
+    dob: data.dob || '',
+    joiningDate: data.joiningDate || data.startDate || new Date().toISOString().split('T')[0],
+    startDate: data.startDate || data.joiningDate || new Date().toISOString().split('T')[0],
+    emergencyContact: data.emergencyContact || '',
+    salaryRate: data.salaryRate || '$2,400/mo',
+    rating: data.rating !== undefined ? Number(data.rating) : 4.9,
+    tripsCount: data.tripsCount !== undefined ? Number(data.tripsCount) : 100,
+    avatar: data.avatar || '',
+    notes: data.notes || ''
+  };
+  const notesJson = JSON.stringify(metaData);
+
   // If a driver with the same license or email already exists in DB, unarchive and update
   const existing = await prisma.drivers.findFirst({
     where: {
@@ -171,7 +231,7 @@ async function createDriver(data) {
         status: statusVal,
         balance: data.balance !== undefined ? parseFloat(data.balance) : existing.balance,
         deposit_held: data.depositHeld !== undefined ? parseFloat(data.depositHeld) : existing.deposit_held,
-        notes: data.notes || existing.notes || 'Commercial Fleet Driver',
+        notes: notesJson,
         archived_at: null
       }
     });
@@ -190,7 +250,7 @@ async function createDriver(data) {
       status: statusVal,
       balance: data.balance !== undefined ? parseFloat(data.balance) : 0.00,
       deposit_held: data.depositHeld !== undefined ? parseFloat(data.depositHeld) : 500.00,
-      notes: data.notes || 'Commercial Fleet Driver'
+      notes: notesJson
     }
   });
 
@@ -222,6 +282,8 @@ async function updateDriver(id, updates) {
     dataToUpdate.first_name = names[0];
     dataToUpdate.last_name = names.slice(1).join(' ') || '';
   }
+  if (updates.firstName) dataToUpdate.first_name = updates.firstName.trim();
+  if (updates.lastName) dataToUpdate.last_name = updates.lastName.trim();
   if (updates.phone) dataToUpdate.phone = updates.phone;
   if (updates.email) dataToUpdate.email = updates.email.trim().toLowerCase();
   if (updates.license) dataToUpdate.license_number = updates.license.trim().toUpperCase();
@@ -231,7 +293,33 @@ async function updateDriver(id, updates) {
     dataToUpdate.status = statusMap[updates.status] || 'active';
   }
   if (updates.balance !== undefined) dataToUpdate.balance = parseFloat(updates.balance);
-  if (updates.notes) dataToUpdate.notes = updates.notes;
+  if (updates.depositHeld !== undefined) dataToUpdate.deposit_held = parseFloat(updates.depositHeld);
+
+  // Preserve & merge metadata into notes JSON
+  let existingMeta = {};
+  if (driver.notes) {
+    try {
+      existingMeta = JSON.parse(driver.notes);
+    } catch (e) {
+      existingMeta = { notes: driver.notes };
+    }
+  }
+
+  const mergedMeta = {
+    ...existingMeta,
+    address: updates.address !== undefined ? updates.address : (existingMeta.address || ''),
+    dob: updates.dob !== undefined ? updates.dob : (existingMeta.dob || ''),
+    joiningDate: updates.joiningDate || updates.startDate || existingMeta.joiningDate || '',
+    startDate: updates.startDate || updates.joiningDate || existingMeta.startDate || '',
+    emergencyContact: updates.emergencyContact !== undefined ? updates.emergencyContact : (existingMeta.emergencyContact || ''),
+    salaryRate: updates.salaryRate !== undefined ? updates.salaryRate : (existingMeta.salaryRate || '$2,400/mo'),
+    avatar: updates.avatar || existingMeta.avatar || '',
+    rating: updates.rating !== undefined ? Number(updates.rating) : (existingMeta.rating || 4.9),
+    tripsCount: updates.tripsCount !== undefined ? Number(updates.tripsCount) : (existingMeta.tripsCount || 100),
+    notes: updates.notes !== undefined ? updates.notes : (existingMeta.notes || '')
+  };
+
+  dataToUpdate.notes = JSON.stringify(mergedMeta);
 
   await prisma.drivers.update({
     where: { id: driver.id },

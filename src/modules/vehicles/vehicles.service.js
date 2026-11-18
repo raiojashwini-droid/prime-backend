@@ -29,10 +29,22 @@ function formatVehicle(v) {
   const formattedId = `VEH-${String(idNum).padStart(3, '0')}`;
 
   let vehicleType = 'Sedan';
-  if (['Tahoe'].includes(v.model)) vehicleType = 'SUV';
-  else if (['F-150'].includes(v.model)) vehicleType = 'Truck';
-  else if (['Model 3'].includes(v.model)) vehicleType = 'Electric';
-  else if (['5 Series'].includes(v.model)) vehicleType = 'Luxury';
+  const modelLower = (v.model || '').toLowerCase();
+  const makeLower = (v.make || '').toLowerCase();
+
+  if (modelLower.includes('suburban') || modelLower.includes('tahoe') || modelLower.includes('explorer') || modelLower.includes('suv')) {
+    vehicleType = 'SUV';
+  } else if (modelLower.includes('transit') || modelLower.includes('f-150') || modelLower.includes('truck') || modelLower.includes('cargo')) {
+    vehicleType = 'Truck';
+  } else if (makeLower.includes('tesla') || modelLower.includes('model 3') || modelLower.includes('ev') || modelLower.includes('electric')) {
+    vehicleType = 'Electric';
+  } else if (modelLower.includes('5 series') || modelLower.includes('s-class') || makeLower.includes('bmw') || makeLower.includes('mercedes')) {
+    vehicleType = 'Luxury';
+  } else if (modelLower.includes('camry') || modelLower.includes('accord') || modelLower.includes('sonata') || modelLower.includes('sedan')) {
+    vehicleType = 'Sedan';
+  }
+
+  const isEv = makeLower.includes('tesla') || modelLower.includes('ev') || modelLower.includes('electric');
 
   return {
     id: formattedId,
@@ -43,13 +55,13 @@ function formatVehicle(v) {
     model: v.model,
     year: v.year,
     type: vehicleType,
-    fuel: v.make === 'Tesla' ? 'Electric' : 'Gasoline',
+    fuel: isEv ? 'Electric' : 'Gasoline',
     transmission: 'Automatic',
     status: statusMap[v.status] || 'Available',
     driver: driverName,
-    color: v.color || 'Black',
-    mileage: `${v.mileage.toLocaleString()} mi`,
-    rawMileage: v.mileage,
+    color: v.color || 'White',
+    mileage: `${(v.mileage || 0).toLocaleString()} mi`,
+    rawMileage: v.mileage || 0,
     vin: v.vin,
     purchasePrice: Number(v.purchase_price) || 28500,
     insuranceExpiry: '2026-11-15',
@@ -62,18 +74,26 @@ function formatVehicle(v) {
 async function getAllVehicles() {
   const list = await prisma.vehicles.findMany({
     where: { archived_at: null },
-    include: {
-      rentals: {
-        where: { status: 'active' },
-        include: {
-          drivers: true
-        }
-      }
-    },
     orderBy: { id: 'asc' }
   });
 
-  return list.map(formatVehicle);
+  const activeRentals = await prisma.rentals.findMany({
+    where: { status: 'active' }
+  }).catch(() => []);
+
+  const drivers = await prisma.drivers.findMany().catch(() => []);
+  const driverMap = new Map(drivers.map((d) => [String(d.id), d]));
+
+  const rentalsByVehicle = new Map();
+  for (const r of activeRentals) {
+    const d = r.driver_id ? driverMap.get(String(r.driver_id)) || null : null;
+    rentalsByVehicle.set(String(r.vehicle_id), [{ ...r, drivers: d }]);
+  }
+
+  return list.map((v) => {
+    const vRentals = rentalsByVehicle.get(String(v.id)) || [];
+    return formatVehicle({ ...v, rentals: vRentals });
+  });
 }
 
 async function getVehicleById(id) {
@@ -88,24 +108,31 @@ async function getVehicleById(id) {
   }
 
   const v = await prisma.vehicles.findFirst({
-    where: searchCondition,
-    include: {
-      rentals: {
-        where: { status: 'active' },
-        include: {
-          drivers: true
-        }
-      }
-    }
+    where: searchCondition
   });
 
   if (!v) {
-    const err = new Error(`Vehicle not found`);
+    const err = new Error(`Vehicle "${id}" not found`);
     err.status = 404;
     throw err;
   }
 
-  return formatVehicle(v);
+  // Safely resolve active rental & driver without relational join crashes
+  const activeRental = await prisma.rentals.findFirst({
+    where: { vehicle_id: v.id, status: 'active' }
+  }).catch(() => null);
+
+  let driver = null;
+  if (activeRental && activeRental.driver_id) {
+    driver = await prisma.drivers.findFirst({
+      where: { id: activeRental.driver_id }
+    }).catch(() => null);
+  }
+
+  return formatVehicle({
+    ...v,
+    rentals: activeRental ? [{ ...activeRental, drivers: driver }] : []
+  });
 }
 
 async function createVehicle(data) {
@@ -118,9 +145,9 @@ async function createVehicle(data) {
     'Sold/Retired': 'sold_retired'
   };
 
-  const mileageNum = parseInt(String(data.mileage || '0').replace(/[^0-9]/g, ''), 10) || 0;
-  const cleanVin = (data.vin || `1PRIME${Date.now()}`).trim().toUpperCase();
-  const cleanPlate = (data.plate || `PR-${Math.floor(1000 + Math.random() * 9000)}`).trim().toUpperCase();
+  const mileageNum = data.mileage ? parseInt(String(data.mileage).replace(/[^0-9]/g, ''), 10) : 0;
+  const cleanVin = (data.vin || '').toUpperCase().trim();
+  const cleanPlate = (data.plate || '').toUpperCase().trim();
 
   // If a vehicle with the exact VIN or Plate was previously archived, restore/update it
   const existingArchived = await prisma.vehicles.findFirst({
@@ -187,12 +214,23 @@ async function updateVehicle(id, updates) {
     };
   }
 
-  const existing = await prisma.vehicles.findFirst({
+  let existing = await prisma.vehicles.findFirst({
     where: searchCondition
   });
 
+  if (!existing && (updates.plate || updates.vin)) {
+    existing = await prisma.vehicles.findFirst({
+      where: {
+        OR: [
+          ...(updates.plate ? [{ plate: updates.plate.toUpperCase().trim() }] : []),
+          ...(updates.vin ? [{ vin: updates.vin.toUpperCase().trim() }] : [])
+        ]
+      }
+    });
+  }
+
   if (!existing) {
-    const err = new Error(`Vehicle not found`);
+    const err = new Error(`Vehicle "${id}" not found`);
     err.status = 404;
     throw err;
   }
@@ -213,9 +251,21 @@ async function updateVehicle(id, updates) {
   if (updates.mileage !== undefined) {
     dataToUpdate.mileage = parseInt(String(updates.mileage).replace(/[^0-9]/g, ''), 10);
   }
-  if (updates.plate) dataToUpdate.plate = updates.plate;
-  if (updates.color) dataToUpdate.color = updates.color;
-  if (updates.location) dataToUpdate.location = updates.location;
+  if (updates.plate) dataToUpdate.plate = updates.plate.toUpperCase().trim();
+  if (updates.make) dataToUpdate.make = updates.make.trim();
+  if (updates.model) dataToUpdate.model = updates.model.trim();
+  if (updates.year) dataToUpdate.year = parseInt(updates.year, 10);
+  if (updates.color) dataToUpdate.color = updates.color.trim();
+  if (updates.vin) dataToUpdate.vin = updates.vin.toUpperCase().trim();
+  if (updates.purchasePrice !== undefined || updates.purchase_price !== undefined) {
+    dataToUpdate.purchase_price = parseFloat(updates.purchasePrice || updates.purchase_price);
+  }
+  if (updates.location || updates.depotLocation) {
+    dataToUpdate.location = updates.location || updates.depotLocation;
+  }
+  if (updates.financingDetails || updates.financingType) {
+    dataToUpdate.financing_details = updates.financingDetails || updates.financingType;
+  }
 
   await prisma.vehicles.update({
     where: { id: existing.id },
@@ -241,39 +291,50 @@ async function deleteVehicle(id) {
     };
   }
 
-  const existing = await prisma.vehicles.findFirst({
+  let existing = await prisma.vehicles.findFirst({
     where: searchCondition
   });
 
-  if (existing) {
-    try {
-      // Clean up child relations first so MySQL foreign key constraints are satisfied
-      await prisma.rentals.deleteMany({ where: { vehicle_id: existing.id } });
-      await prisma.documents.deleteMany({ where: { vehicle_id: existing.id } });
-      await prisma.maintenance_records.deleteMany({ where: { vehicle_id: existing.id } });
-      await prisma.tolls_tickets.deleteMany({ where: { vehicle_id: existing.id } });
-      await prisma.insurance_claims.deleteMany({ where: { vehicle_id: existing.id } });
-      await prisma.insurance_policies.deleteMany({ where: { vehicle_id: existing.id } });
-      await prisma.inspections.deleteMany({ where: { vehicle_id: existing.id } });
-      await prisma.expenses.deleteMany({ where: { vehicle_id: existing.id } });
-      await prisma.accidents.deleteMany({ where: { vehicle_id: existing.id } });
-
-      // Permanently delete row from MySQL vehicles table
-      await prisma.vehicles.delete({
-        where: { id: existing.id }
-      });
-      return { success: true, message: 'Vehicle permanently removed from database' };
-    } catch (delErr) {
-      console.warn('Cascade delete encountered constraint, forcing direct delete:', delErr?.message);
-      try {
-        await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 0');
-        await prisma.$executeRawUnsafe(`DELETE FROM vehicles WHERE id = ${existing.id}`);
-        await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 1');
-        return { success: true, message: 'Vehicle permanently removed from database' };
-      } catch (rawErr) {
-        console.error('Raw deleteVehicle error:', rawErr);
-        throw rawErr;
+  if (!existing) {
+    existing = await prisma.vehicles.findFirst({
+      where: {
+        OR: [
+          { plate: String(id).toUpperCase().trim() },
+          { vin: String(id).toUpperCase().trim() }
+        ]
       }
+    });
+  }
+
+  if (existing) {
+    const vId = existing.id;
+    try {
+      // 1. Clean up or unlink child relations so foreign keys don't block deletion
+      await prisma.rentals.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.documents.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.maintenance_records.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.tolls_tickets.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.insurance_claims.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.insurance_policies.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.inspections.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.expenses.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.accidents.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+
+      // 2. Delete row from vehicles table
+      await prisma.vehicles.delete({
+        where: { id: vId }
+      });
+      return { success: true, message: `Vehicle ${id} permanently removed from database` };
+    } catch (delErr) {
+      console.warn('Direct delete fallback to archive:', delErr?.message);
+      await prisma.vehicles.update({
+        where: { id: vId },
+        data: {
+          status: 'sold_retired',
+          archived_at: new Date()
+        }
+      });
+      return { success: true, message: `Vehicle ${id} successfully archived.` };
     }
   }
 

@@ -363,6 +363,20 @@ async function createTicket(data) {
     }
   }
 
+  // Validate driver and rental foreign keys exist in DB to prevent foreign key errors
+  if (driverId) {
+    const validDriver = await db('drivers').where({ id: driverId }).first();
+    if (!validDriver) driverId = null;
+  }
+
+  if (rentalId) {
+    const validRental = await db('rentals').where({ id: rentalId }).first();
+    if (!validRental) rentalId = null;
+  } else if (contractNo && contractNo !== 'N/A') {
+    const validRental = await db('rentals').where({ contract_no: contractNo }).first();
+    if (validRental) rentalId = validRental.id;
+  }
+
   const fineAmt = Number(data.amount || data.fineAmount || 75);
   const adminFee = Number(data.adminFee !== undefined ? data.adminFee : 15);
   const driverCharge = Number(data.driverCharge || fineAmt + adminFee);
@@ -424,13 +438,23 @@ async function updateTicket(id, updates) {
     if (vId) patch.vehicle_id = vId;
   }
 
-  if (updates.driver || updates.driverId) {
+  if (updates.driver !== undefined || updates.driverId !== undefined) {
     const dId = await resolveDriverId(updates.driverId || updates.driver);
-    patch.driver_id = dId;
+    if (dId) {
+      const validDriver = await db('drivers').where({ id: dId }).first();
+      patch.driver_id = validDriver ? validDriver.id : null;
+    } else {
+      patch.driver_id = null;
+    }
   }
 
-  if (updates.contract || updates.contractNumber) {
-    patch.contract_number = updates.contract || updates.contractNumber;
+  if (updates.contract !== undefined || updates.contractNumber !== undefined) {
+    const cNo = updates.contract || updates.contractNumber;
+    patch.contract_number = cNo;
+    if (cNo && cNo !== 'N/A') {
+      const validRental = await db('rentals').where({ contract_no: cNo }).first();
+      patch.rental_id = validRental ? validRental.id : null;
+    }
   }
 
   if (updates.referenceNumber || updates.ticketNumber) {

@@ -38,8 +38,8 @@ async function updateDriver(req, res, next) {
 
 async function deleteDriver(req, res, next) {
   try {
-    await driversService.deleteDriver(req.params.id);
-    return res.status(200).json({ success: true, data: { message: 'Driver archived' } });
+    const result = await driversService.deleteDriver(req.params.id);
+    return res.status(200).json({ success: true, data: result });
   } catch (error) {
     next(error);
   }
