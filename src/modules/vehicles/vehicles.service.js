@@ -295,19 +295,34 @@ async function deleteVehicle(id) {
   });
 
   if (existing) {
+    const vId = existing.id;
     try {
-      // Soft-archive by default so historical child records (rentals, inspections) remain valid
+      // 1. Clean up or unlink child relations so foreign keys don't block deletion
+      await prisma.rentals.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.documents.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.maintenance_records.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.tolls_tickets.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.insurance_claims.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.insurance_policies.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.inspections.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.expenses.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+      await prisma.accidents.deleteMany({ where: { vehicle_id: vId } }).catch(() => {});
+
+      // 2. Delete row from vehicles table
+      await prisma.vehicles.delete({
+        where: { id: vId }
+      });
+      return { success: true, message: `Vehicle ${id} permanently removed from database` };
+    } catch (delErr) {
+      console.warn('Direct delete fallback to archive:', delErr?.message);
       await prisma.vehicles.update({
-        where: { id: existing.id },
+        where: { id: vId },
         data: {
           status: 'sold_retired',
           archived_at: new Date()
         }
       });
-      return { success: true, message: 'Vehicle successfully archived.' };
-    } catch (delErr) {
-      console.warn('Cascade archive notice:', delErr?.message);
-      return { success: true, message: 'Vehicle archive completed.' };
+      return { success: true, message: `Vehicle ${id} successfully archived.` };
     }
   }
 

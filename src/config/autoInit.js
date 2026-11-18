@@ -32,9 +32,10 @@ async function autoInitDatabase() {
       { id: 6, vin: '5NPE24AF8RH001006', plate: 'PR-2024-HS', make: 'Hyundai', model: 'Sonata SEL', year: 2024, color: 'Curated Silver', mileage: 21100, status: 'available', purchase_price: 27500.00 }
     ];
 
-    for (const v of standardVehicles) {
-      const exists = await db('vehicles').where({ id: v.id }).first();
-      if (!exists) {
+    // 2. Only seed standard vehicles if vehicles table is completely empty (initial setup)
+    const vehCount = await db('vehicles').count('id as cnt').first().catch(() => null);
+    if (Number(vehCount?.cnt || 0) === 0) {
+      for (const v of standardVehicles) {
         await db('vehicles').insert(v).catch(() => {});
       }
     }
