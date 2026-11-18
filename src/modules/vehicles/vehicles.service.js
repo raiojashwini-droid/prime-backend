@@ -72,45 +72,28 @@ function formatVehicle(v) {
 }
 
 async function getAllVehicles() {
-  try {
-    const list = await prisma.vehicles.findMany({
-      where: { archived_at: null },
-      include: {
-        rentals: {
-          where: { status: 'active' },
-          include: {
-            drivers: true
-          }
-        }
-      },
-      orderBy: { id: 'asc' }
-    });
+  const list = await prisma.vehicles.findMany({
+    where: { archived_at: null },
+    orderBy: { id: 'asc' }
+  });
 
-    return list.map(formatVehicle);
-  } catch (err) {
-    const list = await prisma.vehicles.findMany({
-      where: { archived_at: null },
-      orderBy: { id: 'asc' }
-    });
+  const activeRentals = await prisma.rentals.findMany({
+    where: { status: 'active' }
+  }).catch(() => []);
 
-    const activeRentals = await prisma.rentals.findMany({
-      where: { status: 'active' }
-    }).catch(() => []);
+  const drivers = await prisma.drivers.findMany().catch(() => []);
+  const driverMap = new Map(drivers.map((d) => [String(d.id), d]));
 
-    const drivers = await prisma.drivers.findMany().catch(() => []);
-    const driverMap = new Map(drivers.map((d) => [String(d.id), d]));
-
-    const rentalsByVehicle = new Map();
-    for (const r of activeRentals) {
-      const d = driverMap.get(String(r.driver_id)) || null;
-      rentalsByVehicle.set(String(r.vehicle_id), [{ ...r, drivers: d }]);
-    }
-
-    return list.map((v) => {
-      const vRentals = rentalsByVehicle.get(String(v.id)) || [];
-      return formatVehicle({ ...v, rentals: vRentals });
-    });
+  const rentalsByVehicle = new Map();
+  for (const r of activeRentals) {
+    const d = r.driver_id ? driverMap.get(String(r.driver_id)) || null : null;
+    rentalsByVehicle.set(String(r.vehicle_id), [{ ...r, drivers: d }]);
   }
+
+  return list.map((v) => {
+    const vRentals = rentalsByVehicle.get(String(v.id)) || [];
+    return formatVehicle({ ...v, rentals: vRentals });
+  });
 }
 
 async function getVehicleById(id) {
@@ -125,15 +108,7 @@ async function getVehicleById(id) {
   }
 
   const v = await prisma.vehicles.findFirst({
-    where: searchCondition,
-    include: {
-      rentals: {
-        where: { status: 'active' },
-        include: {
-          drivers: true
-        }
-      }
-    }
+    where: searchCondition
   });
 
   if (!v) {
@@ -142,7 +117,22 @@ async function getVehicleById(id) {
     throw err;
   }
 
-  return formatVehicle(v);
+  // Safely resolve active rental & driver without relational join crashes
+  const activeRental = await prisma.rentals.findFirst({
+    where: { vehicle_id: v.id, status: 'active' }
+  }).catch(() => null);
+
+  let driver = null;
+  if (activeRental && activeRental.driver_id) {
+    driver = await prisma.drivers.findFirst({
+      where: { id: activeRental.driver_id }
+    }).catch(() => null);
+  }
+
+  return formatVehicle({
+    ...v,
+    rentals: activeRental ? [{ ...activeRental, drivers: driver }] : []
+  });
 }
 
 async function createVehicle(data) {
