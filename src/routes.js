@@ -12,6 +12,8 @@ const accountingRoutes = require('./modules/accounting/accounting.routes');
 const vendorsRoutes = require('./modules/vendors/vendors.routes');
 const maintenanceRoutes = require('./modules/maintenance/maintenance.routes');
 const tollsRoutes = require('./modules/tolls_tickets/tolls.routes');
+const inspectionsRoutes = require('./modules/inspections/inspections.routes');
+const paperworkRoutes = require('./modules/employee_paperwork/employee_paperwork.routes');
 
 router.get('/health', async (req, res, next) => {
   try {
@@ -45,5 +47,8 @@ router.use('/vendors', vendorsRoutes);
 router.use('/maintenance', maintenanceRoutes);
 router.use('/tolls', tollsRoutes);
 router.use('/tolls-tickets', tollsRoutes);
+router.use('/inspections', inspectionsRoutes);
+router.use('/paperwork', paperworkRoutes);
+router.use('/employee-paperwork', paperworkRoutes);
 
 module.exports = router;

@@ -60,20 +60,45 @@ function formatVehicle(v) {
 }
 
 async function getAllVehicles() {
-  const list = await prisma.vehicles.findMany({
-    where: { archived_at: null },
-    include: {
-      rentals: {
-        where: { status: 'active' },
-        include: {
-          drivers: true
+  try {
+    const list = await prisma.vehicles.findMany({
+      where: { archived_at: null },
+      include: {
+        rentals: {
+          where: { status: 'active' },
+          include: {
+            drivers: true
+          }
         }
-      }
-    },
-    orderBy: { id: 'asc' }
-  });
+      },
+      orderBy: { id: 'asc' }
+    });
 
-  return list.map(formatVehicle);
+    return list.map(formatVehicle);
+  } catch (err) {
+    const list = await prisma.vehicles.findMany({
+      where: { archived_at: null },
+      orderBy: { id: 'asc' }
+    });
+
+    const activeRentals = await prisma.rentals.findMany({
+      where: { status: 'active' }
+    }).catch(() => []);
+
+    const drivers = await prisma.drivers.findMany().catch(() => []);
+    const driverMap = new Map(drivers.map((d) => [String(d.id), d]));
+
+    const rentalsByVehicle = new Map();
+    for (const r of activeRentals) {
+      const d = driverMap.get(String(r.driver_id)) || null;
+      rentalsByVehicle.set(String(r.vehicle_id), [{ ...r, drivers: d }]);
+    }
+
+    return list.map((v) => {
+      const vRentals = rentalsByVehicle.get(String(v.id)) || [];
+      return formatVehicle({ ...v, rentals: vRentals });
+    });
+  }
 }
 
 async function getVehicleById(id) {

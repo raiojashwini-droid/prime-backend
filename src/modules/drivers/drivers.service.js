@@ -51,25 +51,53 @@ function formatDriver(d) {
 }
 
 async function getAllDrivers() {
-  const list = await prisma.drivers.findMany({
-    where: { archived_at: null },
-    include: {
-      rentals: {
-        where: { status: 'active' },
-        include: {
-          vehicles: true
+  try {
+    const list = await prisma.drivers.findMany({
+      where: { archived_at: null },
+      include: {
+        rentals: {
+          where: { status: 'active' },
+          include: {
+            vehicles: true
+          }
         }
-      }
-    },
-    orderBy: { id: 'asc' }
-  });
+      },
+      orderBy: { id: 'asc' }
+    });
 
-  return list.map(formatDriver);
+    return list.map(formatDriver);
+  } catch (err) {
+    // Resilient fallback when a rental references a missing vehicle record
+    const drivers = await prisma.drivers.findMany({
+      where: { archived_at: null },
+      orderBy: { id: 'asc' }
+    });
+
+    const activeRentals = await prisma.rentals.findMany({
+      where: { status: 'active' }
+    }).catch(() => []);
+
+    const vehicles = await prisma.vehicles.findMany().catch(() => []);
+    const vehicleMap = new Map(vehicles.map((v) => [String(v.id), v]));
+
+    const rentalsByDriver = new Map();
+    for (const r of activeRentals) {
+      const v = vehicleMap.get(String(r.vehicle_id)) || null;
+      rentalsByDriver.set(String(r.driver_id), [{ ...r, vehicles: v }]);
+    }
+
+    return drivers.map((d) => {
+      const driverRentals = rentalsByDriver.get(String(d.id)) || [];
+      return formatDriver({ ...d, rentals: driverRentals });
+    });
+  }
 }
 
 async function findDriverEntity(id) {
   if (!id) return null;
   const strId = String(id).trim();
+
+  let d = null;
 
   // 1. DRV-xxx pattern
   if (strId.toUpperCase().startsWith('DRV-')) {
@@ -77,42 +105,55 @@ async function findDriverEntity(id) {
     if (!isNaN(numPart)) {
       const offsetId = numPart - 100;
       if (offsetId > 0) {
-        const byOffset = await prisma.drivers.findFirst({
-          where: { id: BigInt(offsetId) },
-          include: { rentals: { where: { status: 'active' }, include: { vehicles: true } } }
-        });
-        if (byOffset) return byOffset;
+        d = await prisma.drivers.findFirst({
+          where: { id: BigInt(offsetId) }
+        }).catch(() => null);
       }
-      const byDirect = await prisma.drivers.findFirst({
-        where: { id: BigInt(numPart) },
-        include: { rentals: { where: { status: 'active' }, include: { vehicles: true } } }
-      });
-      if (byDirect) return byDirect;
+      if (!d) {
+        d = await prisma.drivers.findFirst({
+          where: { id: BigInt(numPart) }
+        }).catch(() => null);
+      }
     }
   }
 
   // 2. Direct numeric ID
-  if (!isNaN(Number(strId))) {
-    const byId = await prisma.drivers.findFirst({
-      where: { id: BigInt(strId) },
-      include: { rentals: { where: { status: 'active' }, include: { vehicles: true } } }
-    });
-    if (byId) return byId;
+  if (!d && !isNaN(Number(strId))) {
+    d = await prisma.drivers.findFirst({
+      where: { id: BigInt(strId) }
+    }).catch(() => null);
   }
 
   // 3. By license number or email
-  const byLicenseOrEmail = await prisma.drivers.findFirst({
-    where: {
-      OR: [
-        { license_number: strId },
-        { email: strId }
-      ]
-    },
-    include: { rentals: { where: { status: 'active' }, include: { vehicles: true } } }
-  });
-  if (byLicenseOrEmail) return byLicenseOrEmail;
+  if (!d) {
+    d = await prisma.drivers.findFirst({
+      where: {
+        OR: [
+          { license_number: strId },
+          { email: strId }
+        ]
+      }
+    }).catch(() => null);
+  }
 
-  return null;
+  if (!d) return null;
+
+  // Safely find active rental & vehicle without relational join crashes
+  const activeRental = await prisma.rentals.findFirst({
+    where: { driver_id: d.id, status: 'active' }
+  }).catch(() => null);
+
+  let vehicle = null;
+  if (activeRental && activeRental.vehicle_id) {
+    vehicle = await prisma.vehicles.findFirst({
+      where: { id: activeRental.vehicle_id }
+    }).catch(() => null);
+  }
+
+  return {
+    ...d,
+    rentals: activeRental ? [{ ...activeRental, vehicles: vehicle }] : []
+  };
 }
 
 async function getDriverById(id) {

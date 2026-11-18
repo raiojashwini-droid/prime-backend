@@ -87,45 +87,72 @@ function formatRental(r) {
 }
 
 async function getAllRentals() {
-  const list = await prisma.rentals.findMany({
-    include: {
-      vehicles: true,
-      drivers: true
-    },
-    orderBy: { id: 'asc' }
-  });
+  try {
+    const list = await prisma.rentals.findMany({
+      include: {
+        vehicles: true,
+        drivers: true
+      },
+      orderBy: { id: 'asc' }
+    });
 
-  return list.map(formatRental);
+    return list.map(formatRental);
+  } catch (err) {
+    // Resilient fallback when a rental references an unseeded or missing vehicle ID
+    const rentals = await prisma.rentals.findMany({
+      orderBy: { id: 'asc' }
+    });
+
+    const drivers = await prisma.drivers.findMany().catch(() => []);
+    const driverMap = new Map(drivers.map((d) => [String(d.id), d]));
+
+    const vehicles = await prisma.vehicles.findMany().catch(() => []);
+    const vehicleMap = new Map(vehicles.map((v) => [String(v.id), v]));
+
+    return rentals.map((r) => {
+      const v = vehicleMap.get(String(r.vehicle_id)) || null;
+      const d = driverMap.get(String(r.driver_id)) || null;
+      return formatRental({ ...r, vehicles: v, drivers: d });
+    });
+  }
 }
 
 async function findRentalEntity(id) {
   if (!id) return null;
   const strId = String(id).trim();
 
-  // 1. Exact contract_no match (e.g. PR-CTR-2026-xxx or RNT-xxx)
-  let found = await prisma.rentals.findFirst({
-    where: { contract_no: strId },
-    include: { vehicles: true, drivers: true }
-  });
-  if (found) return found;
+  let rental = null;
+
+  // 1. Exact contract_no match
+  rental = await prisma.rentals.findFirst({
+    where: { contract_no: strId }
+  }).catch(() => null);
 
   // 2. Numeric primary key match
-  if (!isNaN(Number(strId))) {
-    found = await prisma.rentals.findFirst({
-      where: { id: BigInt(strId) },
-      include: { vehicles: true, drivers: true }
-    });
-    if (found) return found;
+  if (!rental && !isNaN(Number(strId))) {
+    rental = await prisma.rentals.findFirst({
+      where: { id: BigInt(strId) }
+    }).catch(() => null);
   }
 
   // 3. Fallback partial match
-  found = await prisma.rentals.findFirst({
-    where: {
-      contract_no: { contains: strId }
-    },
-    include: { vehicles: true, drivers: true }
-  });
-  return found;
+  if (!rental) {
+    rental = await prisma.rentals.findFirst({
+      where: { contract_no: { contains: strId } }
+    }).catch(() => null);
+  }
+
+  if (!rental) return null;
+
+  // Safely attach vehicle and driver without relational join crashes
+  const v = rental.vehicle_id
+    ? await prisma.vehicles.findFirst({ where: { id: rental.vehicle_id } }).catch(() => null)
+    : null;
+  const d = rental.driver_id
+    ? await prisma.drivers.findFirst({ where: { id: rental.driver_id } }).catch(() => null)
+    : null;
+
+  return { ...rental, vehicles: v, drivers: d };
 }
 
 async function getRentalById(id) {
