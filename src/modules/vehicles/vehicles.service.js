@@ -214,12 +214,23 @@ async function updateVehicle(id, updates) {
     };
   }
 
-  const existing = await prisma.vehicles.findFirst({
+  let existing = await prisma.vehicles.findFirst({
     where: searchCondition
   });
 
+  if (!existing && (updates.plate || updates.vin)) {
+    existing = await prisma.vehicles.findFirst({
+      where: {
+        OR: [
+          ...(updates.plate ? [{ plate: updates.plate.toUpperCase().trim() }] : []),
+          ...(updates.vin ? [{ vin: updates.vin.toUpperCase().trim() }] : [])
+        ]
+      }
+    });
+  }
+
   if (!existing) {
-    const err = new Error(`Vehicle not found`);
+    const err = new Error(`Vehicle "${id}" not found`);
     err.status = 404;
     throw err;
   }
@@ -280,9 +291,20 @@ async function deleteVehicle(id) {
     };
   }
 
-  const existing = await prisma.vehicles.findFirst({
+  let existing = await prisma.vehicles.findFirst({
     where: searchCondition
   });
+
+  if (!existing) {
+    existing = await prisma.vehicles.findFirst({
+      where: {
+        OR: [
+          { plate: String(id).toUpperCase().trim() },
+          { vin: String(id).toUpperCase().trim() }
+        ]
+      }
+    });
+  }
 
   if (existing) {
     const vId = existing.id;

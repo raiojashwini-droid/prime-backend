@@ -38,8 +38,8 @@ async function updateVehicle(req, res, next) {
 
 async function deleteVehicle(req, res, next) {
   try {
-    await vehiclesService.deleteVehicle(req.params.id);
-    return res.status(200).json({ success: true, data: { message: 'Vehicle archived' } });
+    const result = await vehiclesService.deleteVehicle(req.params.id);
+    return res.status(200).json({ success: true, data: result });
   } catch (error) {
     next(error);
   }
