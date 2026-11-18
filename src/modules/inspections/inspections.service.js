@@ -42,6 +42,7 @@ function formatInspection(row) {
       ? `${row.driver_first_name} ${row.driver_last_name || ''}`.trim()
       : 'Unassigned',
     driverId: row.driver_id ? `DRV-${String(row.driver_id).padStart(3, '0')}` : null,
+    inspector: checklist.inspector || row.inspector_name || 'Marcus Brody (Fleet Tech)',
     date: dateStr,
     time: timeStr,
     odometer: Number(row.odometer || 0),
@@ -56,6 +57,7 @@ function formatInspection(row) {
     existingDamage: checklist.existingDamage || 'None',
     newDamage: checklist.newDamage || 'None',
     notes: row.notes || '',
+    photos: checklist.photos || [],
     driverAcknowledged: Boolean(row.driver_acknowledged),
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -133,6 +135,7 @@ function getInspectionsBaseQuery() {
     .leftJoin('vehicles', 'inspections.vehicle_id', 'vehicles.id')
     .leftJoin('rentals', 'inspections.rental_id', 'rentals.id')
     .leftJoin('drivers', 'rentals.driver_id', 'drivers.id')
+    .leftJoin('users', 'inspections.inspector_id', 'users.id')
     .select(
       'inspections.*',
       'vehicles.make as vehicle_make',
@@ -142,7 +145,8 @@ function getInspectionsBaseQuery() {
       'rentals.contract_no as contract_no',
       'drivers.id as driver_id',
       'drivers.first_name as driver_first_name',
-      'drivers.last_name as driver_last_name'
+      'drivers.last_name as driver_last_name',
+      'users.name as inspector_name'
     );
 }
 
@@ -188,6 +192,34 @@ async function resolveVehicleId(input) {
 }
 
 /**
+ * Resolve driver ID from various input formats
+ */
+async function resolveDriverId(input) {
+  if (!input) return null;
+  if (typeof input === 'number') return input;
+  const str = String(input).trim();
+  if (str.toUpperCase().startsWith('DRV-')) {
+    const num = parseInt(str.toUpperCase().replace('DRV-', ''), 10);
+    if (!isNaN(num)) {
+      if (num > 100) {
+        const d = await db('drivers').where({ id: num - 100 }).first();
+        if (d) return d.id;
+      }
+      const d = await db('drivers').where({ id: num }).first();
+      if (d) return d.id;
+    }
+  }
+  if (/^\d+$/.test(str)) {
+    const d = await db('drivers').where({ id: parseInt(str, 10) }).first();
+    if (d) return d.id;
+  }
+  const firstName = str.split(' ')[0];
+  const byName = await db('drivers').whereRaw('LOWER(first_name) = ?', [firstName.toLowerCase()]).first();
+  if (byName) return byName.id;
+  return null;
+}
+
+/**
  * Get all inspections with filters
  */
 async function getAllInspections(filters = {}) {
@@ -227,7 +259,21 @@ async function getInspectionById(id) {
  * Create a new inspection
  */
 async function createInspection(data, inspectorId = 1) {
-  const vId = await resolveVehicleId(data.vehicleId || data.vehicle || data.plate);
+  let vId = await resolveVehicleId(data.vehicleId || data.vehicle || data.plate);
+  if (!vId) {
+    const firstVehicle = await db('vehicles').select('id').first();
+    vId = firstVehicle ? firstVehicle.id : null;
+  }
+
+  let rentalId = data.rentalId || null;
+  if (!rentalId && data.contractId && data.contractId !== 'N/A') {
+    const r = await db('rentals').where({ contract_no: data.contractId }).first();
+    if (r) rentalId = r.id;
+  }
+  if (!rentalId && vId) {
+    const r = await db('rentals').where({ vehicle_id: vId, status: 'active' }).first();
+    if (r) rentalId = r.id;
+  }
 
   let typeInput = (data.type || 'routine').toLowerCase();
   if (typeInput.includes('pickup') || typeInput.includes('check-out')) typeInput = 'pickup';
@@ -242,13 +288,15 @@ async function createInspection(data, inspectorId = 1) {
     spareTirePresent: data.spareTirePresent !== undefined ? Boolean(data.spareTirePresent) : true,
     damageClassification: data.damageClassification || 'No Damage',
     existingDamage: data.existingDamage || 'None',
-    newDamage: data.newDamage || 'None'
+    newDamage: data.newDamage || 'None',
+    inspector: data.inspector || 'Marcus Brody (Fleet Tech)',
+    photos: data.photos || []
   };
 
   const [newId] = await db('inspections').insert({
     inspection_no: data.inspectionNumber || `INSP-${Math.floor(1000 + Math.random() * 9000)}`,
-    vehicle_id: vId || 1,
-    rental_id: data.rentalId || null,
+    vehicle_id: vId,
+    rental_id: rentalId,
     inspector_id: inspectorId,
     inspection_type: typeInput,
     inspection_date: data.date ? `${data.date} 10:00:00` : db.fn.now(),
@@ -261,6 +309,10 @@ async function createInspection(data, inspectorId = 1) {
     created_at: db.fn.now(),
     updated_at: db.fn.now()
   });
+
+  if (vId && data.odometer) {
+    await db('vehicles').where({ id: vId }).update({ mileage: Number(data.odometer) }).catch(() => {});
+  }
 
   return getInspectionById(newId);
 }
@@ -287,7 +339,7 @@ async function updateInspection(id, updates) {
   if (updates.fuelLevel !== undefined) patch.fuel_level = `${updates.fuelLevel}%`;
   if (updates.driverAcknowledged !== undefined) patch.driver_acknowledged = updates.driverAcknowledged ? 1 : 0;
 
-  if (updates.exteriorCondition || updates.interiorCondition || updates.damageClassification || updates.newDamage) {
+  if (updates.exteriorCondition || updates.interiorCondition || updates.damageClassification || updates.newDamage || updates.photos || updates.inspector) {
     let existingChecklist = {};
     try {
       existingChecklist = JSON.parse(existing.condition_checklist || '{}');
@@ -302,7 +354,9 @@ async function updateInspection(id, updates) {
       ...(updates.spareTirePresent !== undefined ? { spareTirePresent: updates.spareTirePresent } : {}),
       ...(updates.damageClassification ? { damageClassification: updates.damageClassification } : {}),
       ...(updates.existingDamage ? { existingDamage: updates.existingDamage } : {}),
-      ...(updates.newDamage ? { newDamage: updates.newDamage } : {})
+      ...(updates.newDamage ? { newDamage: updates.newDamage } : {}),
+      ...(updates.inspector ? { inspector: updates.inspector } : {}),
+      ...(updates.photos ? { photos: updates.photos } : {})
     };
     patch.condition_checklist = JSON.stringify(updatedChecklist);
   }
@@ -357,13 +411,32 @@ async function getAccidentById(id) {
  * Create an accident
  */
 async function createAccident(data) {
-  const vId = await resolveVehicleId(data.vehicleId || data.vehicle || data.plate);
+  let vId = await resolveVehicleId(data.vehicleId || data.vehicle || data.plate);
+  if (!vId) {
+    const firstVehicle = await db('vehicles').select('id').first();
+    vId = firstVehicle ? firstVehicle.id : null;
+  }
+
+  let dId = await resolveDriverId(data.driverId || data.driver);
+  if (!dId && data.driver && data.driver !== 'Unassigned') {
+    const matchD = await db('drivers')
+      .whereRaw('LOWER(CONCAT(first_name, " ", COALESCE(last_name, ""))) LIKE ?', [`%${data.driver.toLowerCase()}%`])
+      .first();
+    if (matchD) dId = matchD.id;
+  }
+
+  let rentalId = data.rentalId || null;
+  if (!rentalId && vId) {
+    const r = await db('rentals').where({ vehicle_id: vId, status: 'active' }).first();
+    if (r) rentalId = r.id;
+  }
 
   const statusMap = {
     Reported: 'reported',
     'Under Investigation': 'under_investigation',
     'Repair Pending': 'repair_pending',
-    Resolved: 'resolved'
+    Resolved: 'resolved',
+    Settled: 'resolved'
   };
 
   const details = {
@@ -380,13 +453,15 @@ async function createAccident(data) {
     driverLiabilityStatus: data.driverLiabilityStatus || 'Under Review',
     driverChargeStatus: data.driverChargeStatus || 'Pending Assessment',
     driverInvoiceNumber: data.driverInvoiceNumber || '',
-    driverPaymentStatus: data.driverPaymentStatus || 'Pending'
+    driverPaymentStatus: data.driverPaymentStatus || 'Pending',
+    assignedShop: data.assignedShop || 'Speedy Pro Auto Clinic',
+    notes: data.notes || ''
   };
 
   const [newId] = await db('accidents').insert({
-    vehicle_id: vId || 1,
-    driver_id: data.driverId ? parseInt(String(data.driverId).replace(/[^0-9]/g, ''), 10) : 1,
-    rental_id: data.rentalId || null,
+    vehicle_id: vId,
+    driver_id: dId || null,
+    rental_id: rentalId,
     accident_date: data.incidentDate ? `${data.incidentDate} 12:00:00` : db.fn.now(),
     location: data.location || 'Fleet Area',
     description: data.damage || data.damageDescription || '',
