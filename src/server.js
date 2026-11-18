@@ -6,6 +6,7 @@ BigInt.prototype.toJSON = function () {
 const app = require('./app');
 const env = require('./config/env');
 const db = require('./config/db');
+const autoInit = require('./config/autoInit');
 const logger = require('./utils/logger');
 
 let currentPort = Number(env.PORT) || 5001;
@@ -30,6 +31,7 @@ function startServer(port) {
     );
     // Explicitly verify and log live database connection on startup
     await checkDatabaseConnection();
+    await autoInit();
   });
 
   server.on('error', (err) => {
