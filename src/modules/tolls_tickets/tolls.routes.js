@@ -14,6 +14,9 @@ router.get('/ezpass', tollsController.getAllTolls);
 
 // Review Workflow Action
 router.patch('/tickets/:id/workflow', tollsController.updateWorkflow);
+router.post('/tickets/:id/workflow', tollsController.updateWorkflow);
+router.patch('/:id/workflow', tollsController.updateWorkflow);
+router.post('/:id/workflow', tollsController.updateWorkflow);
 
 // Municipal Violation Tickets CRUD
 router.get('/tickets', tollsController.getAllTickets);

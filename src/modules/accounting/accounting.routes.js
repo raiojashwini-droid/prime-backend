@@ -40,6 +40,7 @@ router.put('/payables/:id/status', accountingController.updatePayableStatus);
 
 // Balances
 router.get('/balances', accountingController.listDriverBalances);
+router.get('/driver-balances', accountingController.listDriverBalances);
 
 // Vendors
 router.get('/vendors', accountingController.listVendors);

@@ -9,5 +9,6 @@ router.get('/', paperworkController.getPaperwork);
 router.post('/', paperworkController.savePaperwork);
 router.get('/:id', paperworkController.getPaperworkById);
 router.patch('/:id/review', paperworkController.reviewPaperwork);
+router.post('/:id/review', paperworkController.reviewPaperwork);
 
 module.exports = router;

@@ -582,7 +582,15 @@ async function getAllPayables() {
 }
 
 async function createPayable(data) {
-  let vendorId = data.vendorId || null;
+  let vendorId = null;
+  if (data.vendorId) {
+    if (typeof data.vendorId === 'string' && data.vendorId.startsWith('VND-')) {
+      const parsed = parseInt(data.vendorId.replace(/[^0-9]/g, ''), 10);
+      if (!isNaN(parsed)) vendorId = parsed;
+    } else if (!isNaN(Number(data.vendorId))) {
+      vendorId = Number(data.vendorId);
+    }
+  }
   if (!vendorId && data.vendor) {
     const v = await db('vendors').where('name', 'like', `%${data.vendor}%`).first();
     if (v) vendorId = v.id;

@@ -1,17 +1,28 @@
 const prisma = require('../../config/prisma');
 
+function getVehicleCategory(v) {
+  const modelLower = (v.model || '').toLowerCase();
+  const makeLower = (v.make || '').toLowerCase();
+  if (modelLower.includes('suburban') || modelLower.includes('tahoe') || modelLower.includes('explorer') || modelLower.includes('suv')) return 'SUV';
+  if (modelLower.includes('transit') || modelLower.includes('f-150') || modelLower.includes('truck') || modelLower.includes('cargo')) return 'Truck';
+  if (makeLower.includes('tesla') || modelLower.includes('model 3') || modelLower.includes('ev') || modelLower.includes('electric')) return 'Electric';
+  if (modelLower.includes('5 series') || modelLower.includes('s-class') || makeLower.includes('bmw') || makeLower.includes('mercedes')) return 'Luxury';
+  return 'Sedan';
+}
+
 async function getDashboardData({ dateRange = 'This Month', vehicleFilter, driverFilter, categoryFilter } = {}) {
   // 1. Live Database Queries
   const [
-    totalVehicles,
-    activeRentals,
-    activeDrivers,
+    totalVehiclesCount,
+    activeRentalsCount,
+    activeDriversCount,
     fleetStatusGroup,
     expensesSumResult,
     outstandingBalancesResult,
     alertsList,
     dbVehicles,
-    activeRentalsList
+    activeRentalsList,
+    allDrivers
   ] = await Promise.all([
     prisma.vehicles.count({ where: { archived_at: null } }),
     prisma.rentals.count({ where: { status: 'active' } }),
@@ -41,18 +52,81 @@ async function getDashboardData({ dateRange = 'This Month', vehicleFilter, drive
       select: {
         id: true,
         vehicle_id: true,
+        driver_id: true,
         weekly_rate: true,
         contract_no: true,
         end_date: true
       }
+    }),
+    prisma.drivers.findMany({
+      where: { archived_at: null },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        balance: true,
+        status: true
+      }
     })
   ]);
 
-  // 2. Compute dynamic fleet status distribution - purely from DB
+  // Multi-dimensional filtering across vehicle, driver, and category
+  const isVehicleFiltered = vehicleFilter && !vehicleFilter.startsWith('All');
+  const isDriverFiltered = driverFilter && !driverFilter.startsWith('All');
+  const isCategoryFiltered = categoryFilter && !categoryFilter.startsWith('All');
+  const isFiltered = isVehicleFiltered || isDriverFiltered || isCategoryFiltered;
+
+  let filteredVehicles = dbVehicles;
+  if (isVehicleFiltered) {
+    filteredVehicles = filteredVehicles.filter(v => 
+      `${v.make} ${v.model}`.toLowerCase().includes(vehicleFilter.toLowerCase()) ||
+      v.plate?.toLowerCase() === vehicleFilter.toLowerCase()
+    );
+  }
+  if (isCategoryFiltered) {
+    filteredVehicles = filteredVehicles.filter(v => getVehicleCategory(v) === categoryFilter);
+  }
+  if (isDriverFiltered) {
+    const targetDriver = allDrivers.find(d => `${d.first_name} ${d.last_name}`.toLowerCase().includes(driverFilter.toLowerCase()));
+    if (targetDriver) {
+      const driverRentals = activeRentalsList.filter(r => Number(r.driver_id) === Number(targetDriver.id));
+      const vIds = new Set(driverRentals.map(r => Number(r.vehicle_id)));
+      filteredVehicles = filteredVehicles.filter(v => vIds.has(Number(v.id)));
+    }
+  }
+
+  const vIdSet = new Set(filteredVehicles.map(v => Number(v.id)));
+  let filteredRentals = activeRentalsList;
+  if (isVehicleFiltered || isCategoryFiltered) {
+    filteredRentals = filteredRentals.filter(r => vIdSet.has(Number(r.vehicle_id)));
+  }
+  if (isDriverFiltered) {
+    const targetDriver = allDrivers.find(d => `${d.first_name} ${d.last_name}`.toLowerCase().includes(driverFilter.toLowerCase()));
+    if (targetDriver) {
+      filteredRentals = filteredRentals.filter(r => Number(r.driver_id) === Number(targetDriver.id));
+    }
+  }
+
+  let filteredDrivers = allDrivers.filter(d => d.status === 'active');
+  if (isDriverFiltered) {
+    filteredDrivers = filteredDrivers.filter(d => `${d.first_name} ${d.last_name}`.toLowerCase().includes(driverFilter.toLowerCase()));
+  }
+  if (isVehicleFiltered || isCategoryFiltered) {
+    const rentalDriverIds = new Set(filteredRentals.map(r => Number(r.driver_id)));
+    filteredDrivers = filteredDrivers.filter(d => rentalDriverIds.has(Number(d.id)));
+  }
+
+  // 2. Compute dynamic fleet status distribution - matching filter
   const statusCounts = {};
-  fleetStatusGroup.forEach((item) => {
-    statusCounts[item.status] = item._count.id;
-  });
+  if (isFiltered) {
+    filteredVehicles.forEach((v) => {
+      statusCounts[v.status] = (statusCounts[v.status] || 0) + 1;
+    });
+  } else {
+    fleetStatusGroup.forEach((item) => {
+      statusCounts[item.status] = item._count.id;
+    });
+  }
 
   const fleetStatusData = [
     { name: 'Available', value: statusCounts.available || 0, color: '#10B981' },
@@ -83,26 +157,31 @@ async function getDashboardData({ dateRange = 'This Month', vehicleFilter, drive
   }
 
   // Active rental weekly revenue sum * 4.286 weeks
-  const rawMonthlyRevenue = activeRentalsList.reduce((sum, r) => sum + (Number(r.weekly_rate || 0) * 4.286), 0);
+  const rawMonthlyRevenue = filteredRentals.reduce((sum, r) => sum + (Number(r.weekly_rate || 0) * 4.286), 0);
   const monthlyRevenue = Math.round(rawMonthlyRevenue * dateMultiplier);
 
-  const rawMonthlyExpenses = Number(expensesSumResult._sum.amount || 0);
+  const rawMonthlyExpenses = isFiltered
+    ? Math.round((Number(expensesSumResult._sum.amount || 0) / (dbVehicles.length || 1)) * filteredVehicles.length)
+    : Number(expensesSumResult._sum.amount || 0);
   const monthlyExpenses = Math.round(rawMonthlyExpenses * dateMultiplier);
   const netProfit = monthlyRevenue - monthlyExpenses;
 
-  const outstandingBalances = Number(outstandingBalancesResult._sum.balance || 0);
-  const utilizationRate = totalVehicles > 0 ? Math.round((activeRentals / totalVehicles) * 100) : 0;
+  const outstandingBalances = filteredDrivers.reduce((sum, d) => sum + Math.max(0, Number(d.balance || 0)), 0);
+  const totalVehicles = filteredVehicles.length;
+  const activeRentals = filteredRentals.length;
+  const activeDrivers = filteredDrivers.length;
+  const utilizationRate = totalVehicles > 0 ? Math.min(100, Math.round((activeRentals / totalVehicles) * 100)) : 0;
 
   const kpis = {
     totalVehicles,
-    vehiclesChange: '+1 active in fleet',
+    vehiclesChange: isFiltered ? `${totalVehicles} filtered vehicle${totalVehicles === 1 ? '' : 's'}` : '+1 active in fleet',
     activeRentals,
     rentalsChange: `${utilizationRate}% leased`,
     activeDrivers,
-    driversChange: '+1 active driver',
+    driversChange: `${activeDrivers} active driver${activeDrivers === 1 ? '' : 's'}`,
     monthlyRevenue,
     revLabel,
-    revenueChange: '+100% active',
+    revenueChange: isFiltered ? 'Selected Scope' : '+100% active',
     monthlyExpenses,
     expLabel,
     expensesChange: '-10%',
@@ -110,7 +189,7 @@ async function getDashboardData({ dateRange = 'This Month', vehicleFilter, drive
     profitChange: netProfit >= 0 ? '+100%' : '-10%',
     isProfitPositive: netProfit >= 0,
     outstandingBalances,
-    balancesChange: outstandingBalances > 0 ? '1 account due' : 'All clear',
+    balancesChange: outstandingBalances > 0 ? `${outstandingBalances > 0 ? '1' : '0'} account due` : 'All clear',
     utilizationRate,
     inServiceCount: activeRentals,
     benchmarkTarget: 85
@@ -139,8 +218,8 @@ async function getDashboardData({ dateRange = 'This Month', vehicleFilter, drive
 
   // 5. Upcoming Reminders from active contracts
   const upcomingReminders = [];
-  for (const r of activeRentalsList.slice(0, 3)) {
-    const v = dbVehicles.find((veh) => Number(veh.id) === Number(r.vehicle_id));
+  for (const r of filteredRentals.slice(0, 5)) {
+    const v = filteredVehicles.find((veh) => Number(veh.id) === Number(r.vehicle_id)) || dbVehicles.find((veh) => Number(veh.id) === Number(r.vehicle_id));
     if (v) {
       const endD = r.end_date ? new Date(r.end_date) : new Date();
       const formattedDate = endD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -156,7 +235,7 @@ async function getDashboardData({ dateRange = 'This Month', vehicleFilter, drive
     }
   }
 
-  if (upcomingReminders.length === 0) {
+  if (upcomingReminders.length === 0 && !isFiltered) {
     upcomingReminders.push({
       id: 1,
       vehicle: 'Toyota Camry SE',
@@ -171,7 +250,7 @@ async function getDashboardData({ dateRange = 'This Month', vehicleFilter, drive
   // 6. Top Performing Vehicles from DB - Individual vehicle revenue & profit
   // Map rental weekly rates to vehicle IDs
   const vehicleRentalMap = {};
-  activeRentalsList.forEach((r) => {
+  filteredRentals.forEach((r) => {
     const vId = Number(r.vehicle_id);
     const mRev = Math.round(Number(r.weekly_rate || 0) * 4.286);
     vehicleRentalMap[vId] = (vehicleRentalMap[vId] || 0) + mRev;
@@ -194,7 +273,7 @@ async function getDashboardData({ dateRange = 'This Month', vehicleFilter, drive
   // Average expense allocation for operating cost
   const avgExpensePerRented = activeRentals > 0 ? Math.round(monthlyExpenses / activeRentals) : 0;
 
-  const vehiclesWithMetrics = dbVehicles.map((v) => {
+  const vehiclesWithMetrics = filteredVehicles.map((v) => {
     const vId = Number(v.id);
     const vRev = Math.round((vehicleRentalMap[vId] || 0) * dateMultiplier);
     const vExp = Math.round((vehicleExpenseMap[vId] || (vRev > 0 ? avgExpensePerRented : 0)) * dateMultiplier);
