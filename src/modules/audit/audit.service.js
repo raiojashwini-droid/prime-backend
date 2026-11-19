@@ -282,42 +282,19 @@ async function getAuditFiltersMetadata() {
     label: `${u.name} (${formatRole(u.role)})`
   }));
 
-  // 2. Fetch all distinct modules from audit_logs table, merged with registered system modules
+  // 2. Fetch all distinct modules recorded in audit_logs table
   const rawModules = await db('audit_logs')
     .distinct('module')
     .whereNotNull('module')
     .pluck('module');
+  const allModules = rawModules.filter(Boolean).sort();
 
-  const baseModules = [
-    'Vehicles',
-    'Drivers',
-    'Rentals',
-    'Accounting',
-    'Inspections',
-    'Documents',
-    'Users & Roles',
-    'Settings',
-    'Maintenance',
-    'Tolls & Tickets'
-  ];
-  const allModules = Array.from(new Set([...rawModules.filter(Boolean), ...baseModules])).sort();
-
-  // 3. Fetch all distinct actions from audit_logs table, merged with system actions
+  // 3. Fetch all distinct actions recorded in audit_logs table
   const rawActions = await db('audit_logs')
     .distinct('action')
     .whereNotNull('action')
     .pluck('action');
-
-  const baseActions = [
-    'Create',
-    'Edit',
-    'Approve',
-    'Archive',
-    'Contract Generated / Amended',
-    'Permission Change',
-    'Document Activity'
-  ];
-  const allActions = Array.from(new Set([...rawActions.filter(Boolean), ...baseActions])).sort();
+  const allActions = rawActions.filter(Boolean).sort();
 
   return {
     users: formattedUsers,
