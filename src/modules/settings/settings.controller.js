@@ -63,6 +63,19 @@ async function addVehicleStatus(req, res, next) {
   }
 }
 
+async function deleteVehicleStatus(req, res, next) {
+  try {
+    const data = await settingsService.deleteVehicleStatus(req.params.id);
+    return res.status(200).json({
+      success: true,
+      data,
+      message: 'Vehicle status removed from database'
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function addExpenseCategory(req, res, next) {
   try {
     const data = await settingsService.addExpenseCategory(req.body);
@@ -76,6 +89,19 @@ async function addExpenseCategory(req, res, next) {
   }
 }
 
+async function deleteExpenseCategory(req, res, next) {
+  try {
+    const data = await settingsService.deleteExpenseCategory(req.params.id);
+    return res.status(200).json({
+      success: true,
+      data,
+      message: 'Expense category removed from database'
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function addTicketStatus(req, res, next) {
   try {
     const data = await settingsService.addTicketStatus(req.body);
@@ -83,6 +109,19 @@ async function addTicketStatus(req, res, next) {
       success: true,
       data,
       message: 'Ticket status created in database'
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function deleteTicketStatus(req, res, next) {
+  try {
+    const data = await settingsService.deleteTicketStatus(req.params.id);
+    return res.status(200).json({
+      success: true,
+      data,
+      message: 'Ticket status removed from database'
     });
   } catch (error) {
     next(error);
@@ -107,7 +146,10 @@ module.exports = {
   getStatusesAndCategories,
   updateStatusesAndCategories,
   addVehicleStatus,
+  deleteVehicleStatus,
   addExpenseCategory,
+  deleteExpenseCategory,
   addTicketStatus,
+  deleteTicketStatus,
   getAllSettings
 };

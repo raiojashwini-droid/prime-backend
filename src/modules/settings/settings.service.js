@@ -207,6 +207,13 @@ async function addVehicleStatus(item) {
   return list;
 }
 
+async function deleteVehicleStatus(id) {
+  const data = await getStatusesAndCategories();
+  const list = (data.vehicleStatuses || []).filter((v) => v.id !== id);
+  await upsertSetting('vehicle_statuses', JSON.stringify(list), 'Controlled vehicle fleet statuses list');
+  return list;
+}
+
 async function addExpenseCategory(item) {
   const data = await getStatusesAndCategories();
   const list = data.expenseCategories || [];
@@ -219,6 +226,13 @@ async function addExpenseCategory(item) {
     status: item.status || 'Active'
   };
   list.push(newItem);
+  await upsertSetting('expense_categories', JSON.stringify(list), 'Controlled accounting expense categories');
+  return list;
+}
+
+async function deleteExpenseCategory(id) {
+  const data = await getStatusesAndCategories();
+  const list = (data.expenseCategories || []).filter((v) => v.id !== id && v.code !== id);
   await upsertSetting('expense_categories', JSON.stringify(list), 'Controlled accounting expense categories');
   return list;
 }
@@ -238,6 +252,13 @@ async function addTicketStatus(item) {
   return list;
 }
 
+async function deleteTicketStatus(id) {
+  const data = await getStatusesAndCategories();
+  const list = (data.ticketStatuses || []).filter((v) => v.id !== id);
+  await upsertSetting('ticket_statuses', JSON.stringify(list), 'Controlled citation workflow stages');
+  return list;
+}
+
 async function getAllSettings() {
   return db('settings').select('*');
 }
@@ -248,7 +269,10 @@ module.exports = {
   getStatusesAndCategories,
   updateStatusesAndCategories,
   addVehicleStatus,
+  deleteVehicleStatus,
   addExpenseCategory,
+  deleteExpenseCategory,
   addTicketStatus,
+  deleteTicketStatus,
   getAllSettings
 };
