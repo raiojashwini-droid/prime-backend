@@ -219,22 +219,35 @@ async function createAuditLog({
   ipAddress,
   userAgent
 }) {
-  // Bundle record & notes into newValues if object
-  let finalOld = oldValues;
-  if (oldValues && typeof oldValues === 'object') {
-    finalOld = JSON.stringify(oldValues);
+  // Ensure old_values is valid JSON or null to satisfy MySQL CHECK (json_valid(old_values))
+  let finalOld = null;
+  if (oldValues !== undefined && oldValues !== null) {
+    if (typeof oldValues === 'object') {
+      finalOld = JSON.stringify(oldValues);
+    } else {
+      finalOld = JSON.stringify({ value: String(oldValues) });
+    }
   }
 
-  let finalNew = newValues;
-  if (newValues && typeof newValues === 'object') {
+  // Ensure new_values is valid JSON to satisfy MySQL CHECK (json_valid(new_values))
+  let finalNew = null;
+  if (newValues !== undefined && newValues !== null) {
+    if (typeof newValues === 'object') {
+      finalNew = JSON.stringify({
+        record: record || newValues.record,
+        notes: notes || newValues.notes,
+        ...newValues
+      });
+    } else {
+      finalNew = JSON.stringify({
+        value: String(newValues),
+        record: record || `${entityType || 'Record'} #${entityId || ''}`,
+        notes: notes || `${action} on ${mod}`
+      });
+    }
+  } else {
     finalNew = JSON.stringify({
-      record: record || newValues.record,
-      notes: notes || newValues.notes,
-      ...newValues
-    });
-  } else if (typeof newValues === 'string') {
-    finalNew = JSON.stringify({
-      value: newValues,
+      value: 'Updated',
       record: record || `${entityType || 'Record'} #${entityId || ''}`,
       notes: notes || `${action} on ${mod}`
     });
@@ -246,8 +259,8 @@ async function createAuditLog({
     action: action || 'Edit',
     entity_type: entityType || null,
     entity_id: entityId || null,
-    old_values: finalOld || null,
-    new_values: finalNew || null,
+    old_values: finalOld,
+    new_values: finalNew,
     ip_address: ipAddress || null,
     user_agent: userAgent || null,
     created_at: new Date()

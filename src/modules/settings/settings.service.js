@@ -1,4 +1,5 @@
 const db = require('../../config/db');
+const auditService = require('../audit/audit.service');
 
 const DEFAULT_VEHICLE_STATUSES = [
   { id: 'VS-1', name: 'Available', color: 'emerald', description: 'Vehicle is ready and certified for active driver leasing.', canRent: true, canIntake: true, isSystem: true },
@@ -204,20 +205,61 @@ async function addVehicleStatus(item) {
   };
   list.push(newItem);
   await upsertSetting('vehicle_statuses', JSON.stringify(list), 'Controlled vehicle fleet statuses list');
+
+  await auditService.createAuditLog({
+    userId: 1,
+    module: 'Settings',
+    action: 'Create',
+    entityType: 'Vehicle Status',
+    record: `${newItem.id} (${newItem.name})`,
+    oldValues: null,
+    newValues: `Status: ${newItem.name}, Rental Eligible: ${newItem.canRent ? 'Yes' : 'Blocked'}, Intake: ${newItem.canIntake ? 'Allowed' : 'Restricted'}`,
+    notes: `Added new vehicle status "${newItem.name}" into MySQL database.`
+  }).catch(() => {});
+
   return list;
 }
 
 async function updateVehicleStatus(id, patch) {
   const data = await getStatusesAndCategories();
+  const existing = (data.vehicleStatuses || []).find((v) => v.id === id);
   const list = (data.vehicleStatuses || []).map((v) => (v.id === id ? { ...v, ...patch } : v));
   await upsertSetting('vehicle_statuses', JSON.stringify(list), 'Controlled vehicle fleet statuses list');
+
+  const oldSummary = existing ? `Name: ${existing.name}, Rental: ${existing.canRent ? 'Yes' : 'Blocked'}, Intake: ${existing.canIntake ? 'Allowed' : 'Restricted'}` : 'N/A';
+  const newSummary = `Name: ${patch.name || existing?.name}, Rental: ${patch.canRent !== undefined ? (patch.canRent ? 'Yes' : 'Blocked') : (existing?.canRent ? 'Yes' : 'Blocked')}, Intake: ${patch.canIntake !== undefined ? (patch.canIntake ? 'Allowed' : 'Restricted') : (existing?.canIntake ? 'Allowed' : 'Restricted')}`;
+
+  await auditService.createAuditLog({
+    userId: 1,
+    module: 'Settings',
+    action: 'Edit',
+    entityType: 'Vehicle Status',
+    record: `${id} (${patch.name || existing?.name || 'Status'})`,
+    oldValues: oldSummary,
+    newValues: newSummary,
+    notes: `Updated status settings for "${patch.name || existing?.name}" in MySQL database.`
+  }).catch(() => {});
+
   return list;
 }
 
 async function deleteVehicleStatus(id) {
   const data = await getStatusesAndCategories();
+  const existing = (data.vehicleStatuses || []).find((v) => v.id === id);
   const list = (data.vehicleStatuses || []).filter((v) => v.id !== id);
   await upsertSetting('vehicle_statuses', JSON.stringify(list), 'Controlled vehicle fleet statuses list');
+
+  await auditService.createAuditLog({
+    userId: 1,
+    module: 'Settings',
+    action: 'Archive',
+    entityType: 'Vehicle Status',
+    record: `${id} (${existing?.name || 'Status'})`,
+    oldValues: `Active status: ${existing?.name || id}`,
+    newValues: 'Deleted from fleet database',
+    notes: `Removed vehicle status from MySQL database.`
+  }).catch(() => {});
+
   return list;
 }
 
@@ -234,20 +276,58 @@ async function addExpenseCategory(item) {
   };
   list.push(newItem);
   await upsertSetting('expense_categories', JSON.stringify(list), 'Controlled accounting expense categories');
+
+  await auditService.createAuditLog({
+    userId: 1,
+    module: 'Settings',
+    action: 'Create',
+    entityType: 'Expense Category',
+    record: `${newItem.code} (${newItem.name})`,
+    oldValues: null,
+    newValues: `Category: ${newItem.name}, Approval: ${newItem.requiresApproval ? 'Required' : 'Auto-approved'}`,
+    notes: `Added accounting expense category into database.`
+  }).catch(() => {});
+
   return list;
 }
 
 async function updateExpenseCategory(id, patch) {
   const data = await getStatusesAndCategories();
+  const existing = (data.expenseCategories || []).find((e) => e.id === id || e.code === id);
   const list = (data.expenseCategories || []).map((e) => (e.id === id || e.code === id ? { ...e, ...patch } : e));
   await upsertSetting('expense_categories', JSON.stringify(list), 'Controlled accounting expense categories');
+
+  await auditService.createAuditLog({
+    userId: 1,
+    module: 'Settings',
+    action: 'Edit',
+    entityType: 'Expense Category',
+    record: `${existing?.code || id} (${patch.name || existing?.name})`,
+    oldValues: `Approval: ${existing?.requiresApproval ? 'Required' : 'Auto-approved'}`,
+    newValues: `Approval: ${patch.requiresApproval ? 'Required' : 'Auto-approved'}`,
+    notes: `Modified expense category approval rule in database.`
+  }).catch(() => {});
+
   return list;
 }
 
 async function deleteExpenseCategory(id) {
   const data = await getStatusesAndCategories();
+  const existing = (data.expenseCategories || []).find((v) => v.id === id || v.code === id);
   const list = (data.expenseCategories || []).filter((v) => v.id !== id && v.code !== id);
   await upsertSetting('expense_categories', JSON.stringify(list), 'Controlled accounting expense categories');
+
+  await auditService.createAuditLog({
+    userId: 1,
+    module: 'Settings',
+    action: 'Archive',
+    entityType: 'Expense Category',
+    record: `${existing?.code || id}`,
+    oldValues: `Active category: ${existing?.name || id}`,
+    newValues: 'Deleted from database',
+    notes: `Removed expense category from database.`
+  }).catch(() => {});
+
   return list;
 }
 
@@ -263,20 +343,58 @@ async function addTicketStatus(item) {
   };
   list.push(newItem);
   await upsertSetting('ticket_statuses', JSON.stringify(list), 'Controlled citation workflow stages');
+
+  await auditService.createAuditLog({
+    userId: 1,
+    module: 'Settings',
+    action: 'Create',
+    entityType: 'Ticket Status',
+    record: `${newItem.id} (${newItem.name})`,
+    oldValues: null,
+    newValues: `Status: ${newItem.name}, Stage: ${newItem.stage}`,
+    notes: `Created new citation review status in database.`
+  }).catch(() => {});
+
   return list;
 }
 
 async function updateTicketStatus(id, patch) {
   const data = await getStatusesAndCategories();
+  const existing = (data.ticketStatuses || []).find((t) => t.id === id);
   const list = (data.ticketStatuses || []).map((t) => (t.id === id ? { ...t, ...patch } : t));
   await upsertSetting('ticket_statuses', JSON.stringify(list), 'Controlled citation workflow stages');
+
+  await auditService.createAuditLog({
+    userId: 1,
+    module: 'Settings',
+    action: 'Edit',
+    entityType: 'Ticket Status',
+    record: `${id} (${patch.name || existing?.name})`,
+    oldValues: `Stage: ${existing?.stage}, Chargeable: ${existing?.chargeable ? 'Eligible' : 'Review Hold'}`,
+    newValues: `Stage: ${patch.stage || existing?.stage}, Chargeable: ${patch.chargeable ? 'Eligible' : 'Review Hold'}`,
+    notes: `Updated citation status workflow stage in database.`
+  }).catch(() => {});
+
   return list;
 }
 
 async function deleteTicketStatus(id) {
   const data = await getStatusesAndCategories();
+  const existing = (data.ticketStatuses || []).find((v) => v.id === id);
   const list = (data.ticketStatuses || []).filter((v) => v.id !== id);
   await upsertSetting('ticket_statuses', JSON.stringify(list), 'Controlled citation workflow stages');
+
+  await auditService.createAuditLog({
+    userId: 1,
+    module: 'Settings',
+    action: 'Archive',
+    entityType: 'Ticket Status',
+    record: `${id} (${existing?.name || 'Status'})`,
+    oldValues: `Active status: ${existing?.name || id}`,
+    newValues: 'Deleted from database',
+    notes: `Removed citation status from database.`
+  }).catch(() => {});
+
   return list;
 }
 
