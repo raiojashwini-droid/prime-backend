@@ -44,12 +44,14 @@ function formatDriver(d) {
     }
   }
 
+  const fullName = [d.first_name, d.last_name].filter(Boolean).join(' ').trim();
+
   return {
     id: formattedId,
     dbId: idNum,
-    name: `${d.first_name} ${d.last_name}`,
+    name: fullName || d.first_name || 'Driver',
     firstName: d.first_name,
-    lastName: d.last_name,
+    lastName: d.last_name || '',
     phone: d.phone,
     email: d.email,
     license: d.license_number,
@@ -174,9 +176,9 @@ async function getDriverById(id) {
 }
 
 async function createDriver(data) {
-  const names = (data.name || '').trim().split(' ');
+  const names = (data.name || '').trim().split(/\s+/).filter(Boolean);
   const firstName = data.firstName || names[0] || 'Driver';
-  const lastName = data.lastName || names.slice(1).join(' ') || 'Partner';
+  const lastName = data.lastName !== undefined ? data.lastName : (names.slice(1).join(' ') || '');
 
   const statusMap = {
     Active: 'active',
@@ -278,8 +280,8 @@ async function updateDriver(id, updates) {
 
   const dataToUpdate = {};
   if (updates.name) {
-    const names = updates.name.trim().split(' ');
-    dataToUpdate.first_name = names[0];
+    const names = updates.name.trim().split(/\s+/).filter(Boolean);
+    dataToUpdate.first_name = names[0] || 'Driver';
     dataToUpdate.last_name = names.slice(1).join(' ') || '';
   }
   if (updates.firstName) dataToUpdate.first_name = updates.firstName.trim();

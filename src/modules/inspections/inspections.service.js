@@ -246,6 +246,12 @@ async function getInspectionById(id) {
     ? parseInt(id.replace('INS-', ''), 10)
     : parseInt(id, 10);
 
+  if (!numId || isNaN(numId)) {
+    const err = new Error(`Inspection #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
+
   const row = await getInspectionsBaseQuery().where('inspections.id', numId).first();
   if (!row) {
     const err = new Error(`Inspection #${id} not found`);
@@ -325,6 +331,12 @@ async function updateInspection(id, updates) {
     ? parseInt(id.replace('INS-', ''), 10)
     : parseInt(id, 10);
 
+  if (!numId || isNaN(numId)) {
+    const err = new Error(`Inspection #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
+
   const existing = await db('inspections').where({ id: numId }).first();
   if (!existing) {
     const err = new Error(`Inspection #${id} not found`);
@@ -373,6 +385,12 @@ async function deleteInspection(id) {
     ? parseInt(id.replace('INS-', ''), 10)
     : parseInt(id, 10);
 
+  if (!numId || isNaN(numId)) {
+    const err = new Error(`Inspection #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
+
   const deletedCount = await db('inspections').where({ id: numId }).del();
   if (deletedCount === 0) {
     const err = new Error(`Inspection #${id} not found`);
@@ -397,6 +415,12 @@ async function getAccidentById(id) {
   const numId = typeof id === 'string' && id.startsWith('ACC-')
     ? parseInt(id.replace('ACC-', ''), 10)
     : parseInt(id, 10);
+
+  if (!numId || isNaN(numId)) {
+    const err = new Error(`Accident #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
 
   const row = await getAccidentsBaseQuery().where('accidents.id', numId).first();
   if (!row) {
@@ -484,6 +508,12 @@ async function updateAccident(id, updates) {
     ? parseInt(id.replace('ACC-', ''), 10)
     : parseInt(id, 10);
 
+  if (!numId || isNaN(numId)) {
+    const err = new Error(`Accident #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
+
   const existing = await db('accidents').where({ id: numId }).first();
   if (!existing) {
     const err = new Error(`Accident #${id} not found`);
@@ -526,6 +556,12 @@ async function deleteAccident(id) {
   const numId = typeof id === 'string' && id.startsWith('ACC-')
     ? parseInt(id.replace('ACC-', ''), 10)
     : parseInt(id, 10);
+
+  if (!numId || isNaN(numId)) {
+    const err = new Error(`Accident #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
 
   const deletedCount = await db('accidents').where({ id: numId }).del();
   if (deletedCount === 0) {

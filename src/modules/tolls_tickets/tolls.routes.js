@@ -11,6 +11,8 @@ router.get('/stats', tollsController.getStats);
 // Electronic E-ZPass Tolls
 router.get('/electronic', tollsController.getAllTolls);
 router.get('/ezpass', tollsController.getAllTolls);
+router.get('/tolls', tollsController.getAllTolls);
+router.get('/violations', tollsController.getAllTickets);
 
 // Review Workflow Action
 router.patch('/tickets/:id/workflow', tollsController.updateWorkflow);

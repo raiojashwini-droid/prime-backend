@@ -330,6 +330,12 @@ async function getTicketById(id) {
     ? parseInt(id.replace('TCK-', ''), 10)
     : parseInt(id, 10);
 
+  if (!numId || isNaN(numId)) {
+    const err = new Error(`Citation record #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
+
   const row = await getBaseQuery().where('tolls_tickets.id', numId).first();
   if (!row) {
     const err = new Error(`Citation record #${id} not found`);
@@ -424,6 +430,12 @@ async function updateTicket(id, updates) {
     ? parseInt(id.replace('TCK-', ''), 10)
     : parseInt(id, 10);
 
+  if (!numId || isNaN(numId)) {
+    const err = new Error(`Citation record #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
+
   const existing = await db('tolls_tickets').where({ id: numId }).first();
   if (!existing) {
     const err = new Error(`Citation record #${id} not found`);
@@ -507,6 +519,12 @@ async function deleteTicket(id) {
     ? parseInt(id.replace('TCK-', ''), 10)
     : parseInt(id, 10);
 
+  if (!numId || isNaN(numId)) {
+    const err = new Error(`Citation record #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
+
   const deleted = await db('tolls_tickets').where({ id: numId }).del();
   if (deleted === 0) {
     const err = new Error(`Citation record #${id} not found`);
@@ -523,6 +541,12 @@ async function updateWorkflow(id, action, payload = {}) {
   const numId = typeof id === 'string' && id.startsWith('TCK-')
     ? parseInt(id.replace('TCK-', ''), 10)
     : parseInt(id, 10);
+
+  if (!numId || isNaN(numId)) {
+    const err = new Error(`Citation record #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
 
   const existing = await db('tolls_tickets').where({ id: numId }).first();
   if (!existing) {
