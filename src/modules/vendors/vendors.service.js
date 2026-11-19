@@ -194,14 +194,37 @@ async function deleteVendor(id) {
     : parseInt(id, 10);
 
   // Soft delete / set to inactive or hard delete if no expenses
-  const hasExpenses = await db('expenses').where({ vendor_id: numericId }).first();
-  if (hasExpenses) {
+  const expenses = await db('expenses').where({ vendor_id: numericId });
+  if (expenses && expenses.length > 0) {
     await db('vendors').where({ id: numericId }).update({ status: 'inactive' });
-    return { success: true, message: 'Vendor has existing financial records; deactivated to Inactive status.' };
+    const totalAmount = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+    return {
+      success: true,
+      deactivated: true,
+      message: `Vendor has existing financial records ($${totalAmount.toLocaleString()} across ${expenses.length} bills in Accounting); deactivated to Inactive status.`,
+      financialRecords: {
+        count: expenses.length,
+        totalAmount,
+        location: 'Payments & Accounting (/accounting) -> Payables (AP)',
+        sampleInvoices: expenses.slice(0, 3).map((e) => e.description || `Invoice #${e.id}`)
+      }
+    };
   } else {
     await db('vendors').where({ id: numericId }).del();
-    return { success: true, message: 'Vendor deleted successfully.' };
+    return { success: true, deactivated: false, message: 'Vendor deleted successfully.' };
   }
+}
+
+/**
+ * Reactivate an inactive vendor back to Active Partner
+ */
+async function reactivateVendor(id) {
+  const numericId = typeof id === 'string' && id.startsWith('VND-')
+    ? parseInt(id.replace('VND-', ''), 10)
+    : parseInt(id, 10);
+
+  await db('vendors').where({ id: numericId }).update({ status: 'active' });
+  return getVendorById(numericId);
 }
 
 module.exports = {
@@ -209,5 +232,6 @@ module.exports = {
   getVendorById,
   createVendor,
   updateVendor,
-  deleteVendor
+  deleteVendor,
+  reactivateVendor
 };

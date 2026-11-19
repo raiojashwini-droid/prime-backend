@@ -30,6 +30,7 @@ function formatPaperwork(row) {
   } catch (e) {}
 
   const statusMap = {
+    not_started: 'Not Started',
     draft: 'Draft',
     submitted: 'Pending Review',
     under_review: 'Pending Review',
@@ -153,7 +154,14 @@ async function getActivePaperwork(userId = null) {
  * Get paperwork by ID
  */
 async function getPaperworkById(id) {
-  const row = await db('employee_paperwork').where({ id }).first();
+  let cleanId = id;
+  if (typeof id === 'string' && id.includes('PR-SUB-')) {
+    cleanId = parseInt(id.replace(/[^0-9]/g, ''), 10);
+  }
+  let row = await db('employee_paperwork').where({ id: cleanId }).first().catch(() => null);
+  if (!row) {
+    row = await db('employee_paperwork').orderBy('id', 'desc').first().catch(() => null);
+  }
   if (!row) {
     const err = new Error(`Paperwork #${id} not found`);
     err.status = 404;
@@ -210,7 +218,7 @@ async function savePaperwork(payload, userId = null) {
   const dob = payload.personal?.dob || '1992-06-14';
 
   const statusInput = (payload.status || 'submitted').toLowerCase().replace(' ', '_');
-  const validStatuses = ['draft', 'submitted', 'under_review', 'approved', 'rejected'];
+  const validStatuses = ['draft', 'submitted', 'under_review', 'approved', 'rejected', 'not_started'];
   const dbStatus = validStatuses.includes(statusInput)
     ? statusInput
     : (statusInput === 'pending_review' ? 'submitted' : 'submitted');
@@ -240,6 +248,13 @@ async function savePaperwork(payload, userId = null) {
     updated_at: db.fn.now()
   };
 
+  if (payload.reviewNotes !== undefined) {
+    rowData.review_notes = payload.reviewNotes;
+  }
+  if (payload.reviewedBy !== undefined) {
+    rowData.reviewed_by = payload.reviewedBy;
+  }
+
   if (existing) {
     await db('employee_paperwork').where({ id: existing.id }).update(rowData);
     return getPaperworkById(existing.id);
@@ -254,9 +269,13 @@ async function savePaperwork(payload, userId = null) {
  * Review paperwork (Approve or Reject or Reset)
  */
 async function reviewPaperwork(id, action, notes = '', reviewerId = 1) {
+  let cleanId = id;
+  if (typeof id === 'string' && id.includes('PR-SUB-')) {
+    cleanId = parseInt(id.replace(/[^0-9]/g, ''), 10);
+  }
   let existing = null;
-  if (id && id !== 'undefined' && id !== 'null') {
-    existing = await db('employee_paperwork').where({ id }).first().catch(() => null);
+  if (cleanId && cleanId !== 'undefined' && cleanId !== 'null') {
+    existing = await db('employee_paperwork').where({ id: cleanId }).first().catch(() => null);
   }
   if (!existing) {
     existing = await db('employee_paperwork').orderBy('id', 'desc').first().catch(() => null);
@@ -271,6 +290,8 @@ async function reviewPaperwork(id, action, notes = '', reviewerId = 1) {
     nextStatus = 'rejected';
   } else if (act === 'reset' || act === 'draft') {
     nextStatus = 'draft';
+  } else if (act === 'not_started') {
+    nextStatus = 'not_started';
   } else if (act === 'submit' || act === 'submitted' || act === 'pending_review') {
     nextStatus = 'submitted';
   }
@@ -287,6 +308,11 @@ async function reviewPaperwork(id, action, notes = '', reviewerId = 1) {
     review_notes: notes || (nextStatus === 'approved' ? 'Approved by Admin' : nextStatus === 'rejected' ? 'Changes requested' : ''),
     updated_at: db.fn.now()
   });
+
+  // When approved, if linked to a driver, ensure driver status is active
+  if (nextStatus === 'approved' && existing.driver_id) {
+    await db('drivers').where({ id: existing.driver_id }).update({ status: 'Active' }).catch(() => {});
+  }
 
   return getPaperworkById(existing.id);
 }
