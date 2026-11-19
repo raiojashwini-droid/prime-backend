@@ -604,16 +604,51 @@ async function createPayable(data) {
     else if (s.includes('reject')) dbStatus = 'rejected';
   }
 
+  const VALID_EXPENSE_ENUMS = [
+    'insurance', 'registration', 'oil_change', 'repairs', 'tires',
+    'towing', 'cleaning', 'tolls', 'parking', 'tickets',
+    'marketing', 'software', 'bank_fees', 'office', 'legal_accounting', 'other'
+  ];
+
   let cleanCategory = 'repairs';
   if (data.category) {
-    const c = data.category.toLowerCase();
-    if (c.includes('fuel')) cleanCategory = 'parking'; // closest enum
-    else if (c.includes('maint') || c.includes('repair')) cleanCategory = 'repairs';
-    else if (c.includes('insur')) cleanCategory = 'insurance';
-    else if (c.includes('toll')) cleanCategory = 'tolls';
-    else if (c.includes('clean')) cleanCategory = 'cleaning';
-    else if (c.includes('soft') || c.includes('telem')) cleanCategory = 'software';
-    else cleanCategory = 'other';
+    const rawCat = String(data.category).toLowerCase().trim();
+    const normalized = rawCat.replace(/[\s\/\-_]/g, '');
+    const matchedEnum = VALID_EXPENSE_ENUMS.find(e => e.replace(/_/g, '') === normalized);
+
+    if (matchedEnum) {
+      cleanCategory = matchedEnum;
+    } else if (rawCat.includes('fuel')) {
+      cleanCategory = 'parking';
+    } else if (rawCat.includes('maint') || rawCat.includes('repair') || rawCat.includes('vehic') || rawCat.includes('vechil') || rawCat.includes('car')) {
+      cleanCategory = 'repairs';
+    } else if (rawCat.includes('insur')) {
+      cleanCategory = 'insurance';
+    } else if (rawCat.includes('regist')) {
+      cleanCategory = 'registration';
+    } else if (rawCat.includes('toll')) {
+      cleanCategory = 'tolls';
+    } else if (rawCat.includes('clean')) {
+      cleanCategory = 'cleaning';
+    } else if (rawCat.includes('tire')) {
+      cleanCategory = 'tires';
+    } else if (rawCat.includes('ticket')) {
+      cleanCategory = 'tickets';
+    } else if (rawCat.includes('tow')) {
+      cleanCategory = 'towing';
+    } else if (rawCat.includes('bank') || rawCat.includes('fee')) {
+      cleanCategory = 'bank_fees';
+    } else if (rawCat.includes('market') || rawCat.includes('ad')) {
+      cleanCategory = 'marketing';
+    } else if (rawCat.includes('soft') || rawCat.includes('telem')) {
+      cleanCategory = 'software';
+    } else if (rawCat.includes('legal') || rawCat.includes('account')) {
+      cleanCategory = 'legal_accounting';
+    } else if (rawCat.includes('office')) {
+      cleanCategory = 'office';
+    } else {
+      cleanCategory = 'other';
+    }
   }
 
   const insertData = {
