@@ -16,6 +16,7 @@ const inspectionsRoutes = require('./modules/inspections/inspections.routes');
 const paperworkRoutes = require('./modules/employee_paperwork/employee_paperwork.routes');
 const documentsRoutes = require('./modules/documents/documents.routes');
 const settingsRoutes = require('./modules/settings/settings.routes');
+const auditRoutes = require('./modules/audit/audit.routes');
 
 router.get('/health', async (req, res, next) => {
   try {
@@ -54,5 +55,7 @@ router.use('/paperwork', paperworkRoutes);
 router.use('/employee-paperwork', paperworkRoutes);
 router.use('/documents', documentsRoutes);
 router.use('/settings', settingsRoutes);
+router.use('/audit-logs', auditRoutes);
+router.use('/audit', auditRoutes);
 
 module.exports = router;
