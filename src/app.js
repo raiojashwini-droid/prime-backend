@@ -3,7 +3,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const hpp = require('hpp');
 const cookieParser = require('cookie-parser');
-const pinoHttp = require('pino-http');
+// const pinoHttp = require('pino-http');
 const rateLimit = require('express-rate-limit');
 
 const env = require('./config/env');
@@ -60,7 +60,7 @@ const corsOptions = {
       ) {
         return callback(null, true);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Allow origin dynamically to prevent CORS blockages on custom domains
     return callback(null, true);
@@ -84,12 +84,14 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieParser());
 
 // Request Logging
-app.use(
-  pinoHttp({
-    logger,
-    autoLogging: env.NODE_ENV !== 'test'
-  })
-);
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[${req.method}] ${req.originalUrl} -> ${res.statusCode} (${duration}ms)`);
+  });
+  next();
+});
 
 // Global Rate Limiter
 const globalLimiter = rateLimit({
