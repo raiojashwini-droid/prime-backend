@@ -14,15 +14,61 @@ const errorHandler = require('./middlewares/errorHandler');
 const app = express();
 
 // Security Headers
-app.use(helmet());
-
-// Cross-Origin Resource Sharing
 app.use(
-  cors({
-    origin: env.FRONTEND_URL,
-    credentials: true
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' }
   })
 );
+
+// Allowed Origins for Cross-Origin Resource Sharing
+const allowedOrigins = [
+  'https://prime-route01.netlify.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173'
+];
+
+if (env.FRONTEND_URL) {
+  env.FRONTEND_URL.split(',').forEach((url) => {
+    const trimmed = url.trim().replace(/\/$/, '');
+    if (trimmed && !allowedOrigins.includes(trimmed)) {
+      allowedOrigins.push(trimmed);
+    }
+  });
+}
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow non-browser requests (Postman, curl, server-to-server)
+    if (!origin) return callback(null, true);
+
+    const normalizedOrigin = origin.trim().replace(/\/$/, '');
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
+
+    try {
+      const parsedUrl = new URL(origin);
+      if (
+        parsedUrl.hostname.endsWith('.netlify.app') ||
+        parsedUrl.hostname === 'localhost' ||
+        parsedUrl.hostname === '127.0.0.1'
+      ) {
+        return callback(null, true);
+      }
+    } catch (e) {}
+
+    // Allow origin dynamically to prevent CORS blockages on custom domains
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // HTTP Parameter Pollution Protection
 app.use(hpp());
