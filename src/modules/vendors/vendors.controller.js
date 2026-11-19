@@ -81,10 +81,30 @@ async function deleteVendor(req, res, next) {
   }
 }
 
+async function reactivateVendor(req, res, next) {
+  try {
+    const updated = await vendorsService.reactivateVendor(req.params.id);
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        error: { message: `Vendor "${req.params.id}" not found`, code: 'NOT_FOUND' }
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      message: `Vendor ${updated.name} reactivated successfully to Active Partner.`,
+      data: updated
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getAllVendors,
   getVendorById,
   createVendor,
   updateVendor,
-  deleteVendor
+  deleteVendor,
+  reactivateVendor
 };
