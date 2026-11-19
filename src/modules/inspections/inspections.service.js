@@ -42,7 +42,7 @@ function formatInspection(row) {
       ? `${row.driver_first_name} ${row.driver_last_name || ''}`.trim()
       : 'Unassigned',
     driverId: row.driver_id ? `DRV-${String(row.driver_id).padStart(3, '0')}` : null,
-    inspector: checklist.inspector || row.inspector_name || 'Marcus Brody (Fleet Tech)',
+    inspector: (checklist.inspector && checklist.inspector.trim()) || (row.inspector_name && row.inspector_name.trim()) || 'Marcus Brody (Fleet Tech)',
     date: dateStr,
     time: timeStr,
     odometer: Number(row.odometer || 0),
