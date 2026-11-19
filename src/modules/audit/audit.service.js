@@ -169,10 +169,23 @@ async function getAuditLogs({
     }
 
     const notes = newParsed?.notes || oldParsed?.notes || `${row.action} action executed in ${row.module}`;
-    const record =
-      newParsed?.record ||
-      oldParsed?.record ||
-      `${row.entity_type || 'Record'} #${row.entity_id || row.id}`;
+    
+    // Resolve precise Target Record entity
+    let record = newParsed?.record || oldParsed?.record || null;
+    if (!record || record === row.module || record.toLowerCase() === 'drivers' || record.toLowerCase() === 'vehicles' || record.toLowerCase() === 'system') {
+      const text = String(newParsed?.value || newParsed?.notes || oldParsed?.value || notes || '');
+      const driverMatch = text.match(/(?:New driver|Driver)\s+([^.]*?\([^)]+\))/i);
+      const vehicleMatch = text.match(/(?:New vehicle|Vehicle)\s+([^.]*?\([^)]+\))/i);
+      if (driverMatch && driverMatch[1]) {
+        record = driverMatch[1].trim();
+      } else if (vehicleMatch && vehicleMatch[1]) {
+        record = vehicleMatch[1].trim();
+      } else if (row.entity_id) {
+        record = `${row.entity_type || row.module} #${row.entity_id}`;
+      } else {
+        record = record || `${row.module || 'Record'}`;
+      }
+    }
 
     const userName = row.user_name || 'System / Automated';
     const userRoleStr = formatRole(row.user_role);
