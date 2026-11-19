@@ -27,7 +27,21 @@ async function getUserById(req, res, next) {
   }
 }
 
+async function createUser(req, res, next) {
+  try {
+    const user = await usersService.createUser(req.body);
+    return res.status(201).json({
+      success: true,
+      message: 'User created successfully with default password 123456',
+      data: { user }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   listUsers,
-  getUserById
+  getUserById,
+  createUser
 };
