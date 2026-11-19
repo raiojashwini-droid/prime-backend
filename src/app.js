@@ -60,7 +60,7 @@ const corsOptions = {
       ) {
         return callback(null, true);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Allow origin dynamically to prevent CORS blockages on custom domains
     return callback(null, true);
@@ -87,7 +87,7 @@ app.use(cookieParser());
 app.use(
   pinoHttp({
     logger,
-    autoLogging: env.NODE_ENV !== 'test'
+    autoLogging: false
   })
 );
 
