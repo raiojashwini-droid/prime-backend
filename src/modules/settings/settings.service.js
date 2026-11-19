@@ -207,6 +207,13 @@ async function addVehicleStatus(item) {
   return list;
 }
 
+async function updateVehicleStatus(id, patch) {
+  const data = await getStatusesAndCategories();
+  const list = (data.vehicleStatuses || []).map((v) => (v.id === id ? { ...v, ...patch } : v));
+  await upsertSetting('vehicle_statuses', JSON.stringify(list), 'Controlled vehicle fleet statuses list');
+  return list;
+}
+
 async function deleteVehicleStatus(id) {
   const data = await getStatusesAndCategories();
   const list = (data.vehicleStatuses || []).filter((v) => v.id !== id);
@@ -226,6 +233,13 @@ async function addExpenseCategory(item) {
     status: item.status || 'Active'
   };
   list.push(newItem);
+  await upsertSetting('expense_categories', JSON.stringify(list), 'Controlled accounting expense categories');
+  return list;
+}
+
+async function updateExpenseCategory(id, patch) {
+  const data = await getStatusesAndCategories();
+  const list = (data.expenseCategories || []).map((e) => (e.id === id || e.code === id ? { ...e, ...patch } : e));
   await upsertSetting('expense_categories', JSON.stringify(list), 'Controlled accounting expense categories');
   return list;
 }
@@ -252,6 +266,13 @@ async function addTicketStatus(item) {
   return list;
 }
 
+async function updateTicketStatus(id, patch) {
+  const data = await getStatusesAndCategories();
+  const list = (data.ticketStatuses || []).map((t) => (t.id === id ? { ...t, ...patch } : t));
+  await upsertSetting('ticket_statuses', JSON.stringify(list), 'Controlled citation workflow stages');
+  return list;
+}
+
 async function deleteTicketStatus(id) {
   const data = await getStatusesAndCategories();
   const list = (data.ticketStatuses || []).filter((v) => v.id !== id);
@@ -269,10 +290,13 @@ module.exports = {
   getStatusesAndCategories,
   updateStatusesAndCategories,
   addVehicleStatus,
+  updateVehicleStatus,
   deleteVehicleStatus,
   addExpenseCategory,
+  updateExpenseCategory,
   deleteExpenseCategory,
   addTicketStatus,
+  updateTicketStatus,
   deleteTicketStatus,
   getAllSettings
 };

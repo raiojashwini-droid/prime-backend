@@ -15,14 +15,17 @@ router.get('/statuses-categories', settingsController.getStatusesAndCategories);
 router.put('/statuses-categories', settingsController.updateStatusesAndCategories);
 router.post('/statuses-categories', settingsController.updateStatusesAndCategories);
 
-// Specific additions & deletions
+// Specific additions, updates & deletions
 router.post('/vehicle-statuses', settingsController.addVehicleStatus);
+router.put('/vehicle-statuses/:id', settingsController.updateVehicleStatus);
 router.delete('/vehicle-statuses/:id', settingsController.deleteVehicleStatus);
 
 router.post('/expense-categories', settingsController.addExpenseCategory);
+router.put('/expense-categories/:id', settingsController.updateExpenseCategory);
 router.delete('/expense-categories/:id', settingsController.deleteExpenseCategory);
 
 router.post('/ticket-statuses', settingsController.addTicketStatus);
+router.put('/ticket-statuses/:id', settingsController.updateTicketStatus);
 router.delete('/ticket-statuses/:id', settingsController.deleteTicketStatus);
 
 // All raw settings
