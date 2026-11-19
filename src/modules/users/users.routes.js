@@ -9,8 +9,9 @@ router.use(authenticate);
 // Current user permissions
 router.get('/my-permissions', permissionsController.getMyPermissions);
 
-// User listing & details
+// User listing, creation & details
 router.get('/', requireRoles('owner', 'secondary_admin'), usersController.listUsers);
+router.post('/', requireRoles('owner', 'secondary_admin'), usersController.createUser);
 router.get('/:id', usersController.getUserById);
 
 // Granular permissions matrix for a user
