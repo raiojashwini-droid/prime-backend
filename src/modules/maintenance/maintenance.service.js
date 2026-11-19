@@ -122,6 +122,11 @@ async function getAllMaintenanceRecords(filters = {}) {
  */
 async function getMaintenanceById(id) {
   const numId = typeof id === 'string' && id.startsWith('MNT-') ? parseInt(id.replace('MNT-', ''), 10) : parseInt(id, 10);
+  if (!numId || isNaN(numId)) {
+    const err = new Error(`Maintenance record #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
   const row = await getBaseQuery().where('maintenance_records.id', numId).first();
   if (!row) {
     const err = new Error(`Maintenance record #${id} not found`);
@@ -312,6 +317,11 @@ async function createMaintenanceRecord(data, userId = null) {
  */
 async function updateMaintenanceRecord(id, updates) {
   const numId = typeof id === 'string' && id.startsWith('MNT-') ? parseInt(id.replace('MNT-', ''), 10) : parseInt(id, 10);
+  if (!numId || isNaN(numId)) {
+    const err = new Error(`Maintenance record #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
   const existing = await db('maintenance_records').where({ id: numId }).first();
   if (!existing) {
     const err = new Error(`Maintenance record #${id} not found`);
@@ -387,6 +397,11 @@ async function updateMaintenanceRecord(id, updates) {
  */
 async function deleteMaintenanceRecord(id) {
   const numId = typeof id === 'string' && id.startsWith('MNT-') ? parseInt(id.replace('MNT-', ''), 10) : parseInt(id, 10);
+  if (!numId || isNaN(numId)) {
+    const err = new Error(`Maintenance record #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
   const deletedCount = await db('maintenance_records').where({ id: numId }).del();
   if (deletedCount === 0) {
     const err = new Error(`Maintenance record #${id} not found`);

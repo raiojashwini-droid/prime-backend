@@ -91,6 +91,8 @@ async function getVendorById(id) {
     ? parseInt(id.replace('VND-', ''), 10)
     : parseInt(id, 10);
 
+  if (!numericId || isNaN(numericId)) return null;
+
   const vendor = await db('vendors').where({ id: numericId }).first();
   if (!vendor) return null;
 
@@ -163,6 +165,12 @@ async function updateVendor(id, data) {
     ? parseInt(id.replace('VND-', ''), 10)
     : parseInt(id, 10);
 
+  if (!numericId || isNaN(numericId)) {
+    const err = new Error(`Vendor #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
+
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.category !== undefined) updateData.category = data.category;
@@ -193,6 +201,12 @@ async function deleteVendor(id) {
     ? parseInt(id.replace('VND-', ''), 10)
     : parseInt(id, 10);
 
+  if (!numericId || isNaN(numericId)) {
+    const err = new Error(`Vendor #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
+
   // Soft delete / set to inactive or hard delete if no expenses
   const expenses = await db('expenses').where({ vendor_id: numericId });
   if (expenses && expenses.length > 0) {
@@ -222,6 +236,12 @@ async function reactivateVendor(id) {
   const numericId = typeof id === 'string' && id.startsWith('VND-')
     ? parseInt(id.replace('VND-', ''), 10)
     : parseInt(id, 10);
+
+  if (!numericId || isNaN(numericId)) {
+    const err = new Error(`Vendor #${id} not found`);
+    err.status = 404;
+    throw err;
+  }
 
   await db('vendors').where({ id: numericId }).update({ status: 'active' });
   return getVendorById(numericId);

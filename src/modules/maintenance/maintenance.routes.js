@@ -11,8 +11,11 @@ router.get('/stats', maintenanceController.getMaintenanceStats);
 // Vehicle availability toggle
 router.patch('/vehicles/:vehicleId/availability', maintenanceController.toggleVehicleAvailability);
 
-// CRUD
+// CRUD & Views
 router.get('/', maintenanceController.getAllMaintenanceRecords);
+router.get('/records', maintenanceController.getAllMaintenanceRecords);
+router.get('/schedules', maintenanceController.getAllMaintenanceRecords);
+router.get('/work-orders', maintenanceController.getAllMaintenanceRecords);
 router.get('/:id', maintenanceController.getMaintenanceById);
 router.post('/', maintenanceController.createMaintenanceRecord);
 router.put('/:id', maintenanceController.updateMaintenanceRecord);
