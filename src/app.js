@@ -13,6 +13,9 @@ const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
 
+// Trust reverse proxy (Railway, Heroku, Nginx) so X-Forwarded-For is properly handled
+app.set('trust proxy', 1);
+
 // Security Headers
 app.use(
   helmet({
@@ -94,6 +97,7 @@ const globalLimiter = rateLimit({
   max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
   message: {
     success: false,
     error: {
