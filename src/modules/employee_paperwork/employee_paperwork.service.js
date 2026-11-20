@@ -57,38 +57,38 @@ function formatPaperwork(row) {
     reviewNotes: row.review_notes || '',
     signature: row.signature_url,
     personal: {
-      firstName: personalData.firstName || row.full_name?.split(' ')[0] || 'David',
-      lastName: personalData.lastName || row.full_name?.split(' ').slice(1).join(' ') || 'Miller',
-      email: personalData.email || 'david.miller@primeroute.io',
-      phone: personalData.phone || row.phone || '+1 (555) 349-1029',
-      dob: personalData.dob || (row.dob ? new Date(row.dob).toISOString().split('T')[0] : '1992-06-14'),
-      address: personalData.address || row.address || '742 Evergreen Terrace',
-      city: personalData.city || 'Queens',
-      state: personalData.state || 'NY',
-      zipCode: personalData.zipCode || personalData.zip || '11375',
-      emergencyContactName: personalData.emergencyContactName || personalData.emergencyName || emergency.name || 'Sarah Miller',
-      emergencyContactPhone: personalData.emergencyContactPhone || personalData.emergencyPhone || emergency.phone || '+1 (555) 902-4821'
+      firstName: personalData.firstName || row.full_name?.split(' ')[0] || '',
+      lastName: personalData.lastName || row.full_name?.split(' ').slice(1).join(' ') || '',
+      email: personalData.email || '',
+      phone: personalData.phone || row.phone || '',
+      dob: personalData.dob || (row.dob ? new Date(row.dob).toISOString().split('T')[0] : ''),
+      address: personalData.address || row.address || '',
+      city: personalData.city || '',
+      state: personalData.state || '',
+      zipCode: personalData.zipCode || personalData.zip || '',
+      emergencyContactName: personalData.emergencyContactName || personalData.emergencyName || emergency.name || '',
+      emergencyContactPhone: personalData.emergencyContactPhone || personalData.emergencyPhone || emergency.phone || ''
     },
     employment: {
-      employeeId: employmentData.employeeId || 'PR-EMP-2026',
-      position: employmentData.position || 'Logistics Fleet Driver',
-      department: employmentData.department || 'Fleet Operations',
-      employmentType: employmentData.employmentType || 'Full-Time',
-      joiningDate: employmentData.joiningDate || employmentData.startDate || '2026-03-01',
-      assignedManager: employmentData.assignedManager || employmentData.manager || 'Elena Vance'
+      employeeId: employmentData.employeeId || 'PR-EMP-2026-01',
+      position: employmentData.position || '',
+      department: employmentData.department || '',
+      employmentType: employmentData.employmentType || 'Full-Time (W-2)',
+      joiningDate: employmentData.joiningDate || employmentData.startDate || '',
+      assignedManager: employmentData.assignedManager || employmentData.manager || ''
     },
     documents: {
-      governmentId: documentsData.governmentId || { name: 'US_Passport_DMiller.pdf', size: '2.4 MB', uploadedAt: '2026-11-04' },
-      drivingLicense: documentsData.drivingLicense || documentsData.driversLicense || { name: 'NY_Driver_License_ClassD.pdf', size: '1.8 MB', uploadedAt: '2026-11-04' },
-      taxDocuments: documentsData.taxDocuments || documentsData.w4Form || { name: 'W4_Signed_2026.pdf', size: '1.1 MB', uploadedAt: '2026-11-04' },
-      bankDetails: documentsData.bankDetails || documentsData.directDepositVoidCheck || { name: 'DirectDeposit_VoidCheck.pdf', size: '890 KB', uploadedAt: '2026-11-04' },
+      governmentId: documentsData.governmentId || null,
+      drivingLicense: documentsData.drivingLicense || documentsData.driversLicense || null,
+      taxDocuments: documentsData.taxDocuments || documentsData.w4Form || null,
+      bankDetails: documentsData.bankDetails || documentsData.directDepositVoidCheck || null,
       otherDocuments: documentsData.otherDocuments || null
     },
     agreements: {
-      codeOfConduct: agreementsData.codeOfConduct !== undefined ? agreementsData.codeOfConduct : true,
-      safetyPolicy: agreementsData.safetyPolicy !== undefined ? agreementsData.safetyPolicy : true,
-      digitalSignature: agreementsData.digitalSignature || row.signature_url || 'David Miller',
-      acceptedTerms: agreementsData.acceptedTerms !== undefined ? agreementsData.acceptedTerms : true
+      codeOfConduct: agreementsData.codeOfConduct !== undefined ? agreementsData.codeOfConduct : false,
+      safetyPolicy: agreementsData.safetyPolicy !== undefined ? agreementsData.safetyPolicy : false,
+      digitalSignature: agreementsData.digitalSignature || row.signature_url || null,
+      acceptedTerms: agreementsData.acceptedTerms !== undefined ? agreementsData.acceptedTerms : false
     }
   };
 }
@@ -105,43 +105,43 @@ async function getActivePaperwork(userId = null) {
     row = await db('employee_paperwork').orderBy('id', 'desc').first().catch(() => null);
   }
 
-  // If table is empty, auto-create initial baseline row
+  // If table is empty, auto-create clean blank baseline row
   if (!row) {
     row = await savePaperwork({
-      status: 'submitted',
+      status: 'not_started',
       personal: {
-        firstName: 'David',
-        lastName: 'Miller',
-        email: 'david.miller@primeroute.io',
-        phone: '+1 (555) 349-1029',
-        dob: '1992-06-14',
-        address: '742 Evergreen Terrace',
-        city: 'Queens',
-        state: 'NY',
-        zipCode: '11375',
-        emergencyContactName: 'Sarah Miller',
-        emergencyContactPhone: '+1 (555) 902-4821'
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+        dob: '',
+        address: '',
+        city: '',
+        state: '',
+        zipCode: '',
+        emergencyContactName: '',
+        emergencyContactPhone: ''
       },
       employment: {
-        employeeId: 'PR-EMP-2026',
-        position: 'Logistics Fleet Driver',
-        department: 'Fleet Operations',
-        employmentType: 'Full-Time',
-        joiningDate: '2026-03-01',
-        assignedManager: 'Elena Vance'
+        employeeId: 'PR-EMP-2026-01',
+        position: '',
+        department: '',
+        employmentType: 'Full-Time (W-2)',
+        joiningDate: '',
+        assignedManager: ''
       },
       documents: {
-        governmentId: { name: 'US_Passport_DMiller.pdf', size: '2.4 MB', uploadedAt: '2026-11-04' },
-        drivingLicense: { name: 'NY_Driver_License_ClassD.pdf', size: '1.8 MB', uploadedAt: '2026-11-04' },
-        taxDocuments: { name: 'W4_Signed_2026.pdf', size: '1.1 MB', uploadedAt: '2026-11-04' },
-        bankDetails: { name: 'DirectDeposit_VoidCheck.pdf', size: '890 KB', uploadedAt: '2026-11-04' },
+        governmentId: null,
+        drivingLicense: null,
+        taxDocuments: null,
+        bankDetails: null,
         otherDocuments: null
       },
       agreements: {
-        codeOfConduct: true,
-        safetyPolicy: true,
-        digitalSignature: 'David Miller',
-        acceptedTerms: true
+        codeOfConduct: false,
+        safetyPolicy: false,
+        digitalSignature: null,
+        acceptedTerms: false
       }
     }, userId);
     return row;
@@ -288,7 +288,9 @@ async function reviewPaperwork(id, action, notes = '', reviewerId = 1) {
   const act = (action || '').toLowerCase();
   if (act === 'reject') {
     nextStatus = 'rejected';
-  } else if (act === 'reset' || act === 'draft') {
+  } else if (act === 'reset') {
+    nextStatus = 'not_started';
+  } else if (act === 'draft') {
     nextStatus = 'draft';
   } else if (act === 'not_started') {
     nextStatus = 'not_started';
@@ -302,12 +304,22 @@ async function reviewPaperwork(id, action, notes = '', reviewerId = 1) {
     if (revUser) validReviewerId = revUser.id;
   }
 
-  await db('employee_paperwork').where({ id: existing.id }).update({
+  const updateFields = {
     status: nextStatus,
     reviewed_by: validReviewerId,
     review_notes: notes || (nextStatus === 'approved' ? 'Approved by Admin' : nextStatus === 'rejected' ? 'Changes requested' : ''),
     updated_at: db.fn.now()
-  });
+  };
+
+  if (act === 'reset') {
+    updateFields.form_data = JSON.stringify({});
+    updateFields.full_name = '';
+    updateFields.signature_url = null;
+    updateFields.review_notes = '';
+    updateFields.submitted_at = null;
+  }
+
+  await db('employee_paperwork').where({ id: existing.id }).update(updateFields);
 
   // When approved, if linked to a driver, ensure driver status is active
   if (nextStatus === 'approved' && existing.driver_id) {
