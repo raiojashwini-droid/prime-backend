@@ -2,6 +2,8 @@
 
 Generate and instantiate **Prisma ORM 7** Client for SQL providers. For MongoDB, follow [Prisma 6 MongoDB setup](v6-mongodb.md). For an existing Prisma 6 SQL app, preserve its client setup rather than copying these examples.
 
+
+
 ## 1. Install dependencies
 
 ```bash
